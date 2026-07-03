@@ -6,12 +6,36 @@ Animux is a customized and extended project originally based on [pystardust/ani-
 
 > Animux does not host, upload, or distribute media files. It only provides a terminal interface for browsing and opening publicly available sources.
 
-## Preview
+## Table of Contents
 
+- [Preview](#preview)
+- [Features](#features)
+- [Source routing](#source-routing)
+- [How it works](#how-it-works)
+- [Requirements](#requirements)
+- [Install](#install)
+- [Usage](#usage)
+- [Options](#options)
+- [Keyboard controls](#keyboard-controls)
+- [Provider override](#provider-override)
+- [Configuration](#configuration)
+- [Data locations](#data-locations)
+- [Installed layout](#installed-layout)
+- [ASCII art](#ascii-art)
+- [Development](#development)
+- [Uninstall](#uninstall)
+- [Credits](#credits)
+- [License](#license)
+- [Legal disclaimer](#legal-disclaimer)
+
+---
+
+## Preview
 
 ![Animux preview image](.assets/animux-preview.png)
 
 ![Animux preview gif](.assets/animux-preview-gif.gif)
+
 ---
 
 ## Features
@@ -25,6 +49,7 @@ Animux is a customized and extended project originally based on [pystardust/ani-
 * Keyboard-first navigation
 * Back navigation with `Esc`
 * Continue watching / history support
+* Cached search and episode metadata for faster repeated browsing
 * HD cover previews in episode menus
 * Random bundled ASCII art in the main menu
 * macOS and Linux support
@@ -90,7 +115,7 @@ Playback or download
 
 For a more detailed scraping overview, see the flow diagram:
 
-![Animux scraping flow](.assets/ani-cli-scraping-flow.png)
+![Animux scraping flow](.assets/animux-scraping-flow.png)
 
 ---
 
@@ -110,6 +135,7 @@ Optional:
 
 * `chafa` for richer terminal image previews
 * `ani-skip` for intro skipping with `mpv`
+* `vlc` if using VLC playback
 * `iina-cli` if using IINA on macOS
 
 ### macOS
@@ -121,6 +147,27 @@ brew install curl fzf mpv ffmpeg perl openssl python chafa
 ```
 
 IINA users should install IINA separately and make sure `iina-cli` is available.
+
+### Linux
+
+Debian/Ubuntu:
+
+```sh
+sudo apt update
+sudo apt install curl fzf mpv ffmpeg perl openssl python3
+```
+
+Fedora:
+
+```sh
+sudo dnf install curl fzf mpv ffmpeg perl openssl python3
+```
+
+Arch Linux:
+
+```sh
+sudo pacman -S curl fzf mpv ffmpeg perl openssl python
+```
 
 ---
 
@@ -272,6 +319,7 @@ Common variables:
 
 ```text
 ANIMUX_PROVIDER
+ANIMUX_CACHE
 ANIMUX_PLAYER
 ANIMUX_DOWNLOAD_DIR
 ANIMUX_QUALITY
@@ -290,6 +338,16 @@ ANIMUX_EPISODE_ART_SIZE
 ```
 
 Legacy `ANI_CLI_*` variables are also supported as fallbacks for compatibility with existing setups.
+
+Search results are cached for 6 hours and episode lists for 24 hours. Disable
+these metadata caches for a run with:
+
+```sh
+ANIMUX_CACHE=0 animux -L es "one piece"
+```
+
+`ANI_CLI_CACHE=0` remains supported as a legacy fallback. Final playback URLs,
+resolved embeds, and direct streams are never cached.
 
 Example:
 
@@ -313,11 +371,13 @@ History is stored at:
 ${XDG_STATE_HOME:-$HOME/.local/state}/animux/ani-hsts
 ```
 
-Cached art is stored at:
+Cached search metadata, episode lists, and art are stored under:
 
 ```text
 ${XDG_CACHE_HOME:-$HOME/.cache}/animux
 ```
+
+Search and episode metadata use the `search/` and `episodes/` subdirectories.
 
 On first use, Animux can copy an existing `ani-cli/ani-hsts` history file when the new Animux history file does not exist. The original history file is not removed.
 

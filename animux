@@ -5,7 +5,7 @@ version_number="4.14.1"
 # ANIMUX_* is the public configuration namespace. Legacy ANI_CLI_* variables
 # remain supported so existing upstream configurations continue to work.
 for animux_env_name in \
-    ART_SIZE ASCII_ART ASCII_ART_DIR AUTO_SELECT_SINGLE BRANCH BUILTIN_ART_HEIGHT COLOR DEFAULT_SOURCE \
+    ART_SIZE ASCII_ART ASCII_ART_DIR AUTO_SELECT_SINGLE BRANCH BUILTIN_ART_HEIGHT CACHE COLOR DEFAULT_SOURCE \
     DOWNLOAD_DIR EPISODE_ART EPISODE_ART_SIZE EPISODE_MENU_HEIGHT \
     EPISODE_PREVIEW_WINDOW EXIT_AFTER_PLAY EXTERNAL_MENU \
     EXTERNAL_MENU_NORMAL_WINDOW FZF_BORDER FZF_COLORS FZF_HEIGHT HEADER \
@@ -19,6 +19,95 @@ do
     fi
 done
 unset animux_env_name animux_env_is_set
+
+# Metadata cache. Final playback URLs and resolved embeds are intentionally not
+# routed through these helpers because they can expire or require fresh headers.
+normalize_cache_value() {
+    printf '%s' "$*" |
+        tr '+\t\n' '   ' |
+        tr '[:upper:]' '[:lower:]' |
+        sed 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//'
+}
+
+cache_digest() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        printf '%s' "$1" | sha256sum | awk '{ print $1 }'
+    elif command -v shasum >/dev/null 2>&1; then
+        printf '%s' "$1" | shasum -a 256 | awk '{ print $1 }'
+    else
+        # cksum is specified by POSIX and produces filename-safe output.
+        printf '%s' "$1" | cksum | awk '{ print $1 "-" $2 }'
+    fi
+}
+
+cache_provider_for_id() {
+    case "$1" in
+        jkanime:*) printf '%s' jkanime ;;
+        animeflv:*) printf '%s' animeflv ;;
+        animeav1:*) printf '%s' animeav1 ;;
+        *) printf '%s' "$provider" ;;
+    esac
+}
+
+cache_read() {
+    [ "$animux_cache_enabled" = "1" ] || return 1
+    [ -r "$1" ] || return 1
+
+    IFS= read -r _animux_cache_saved <"$1" || return 1
+    case "$_animux_cache_saved" in
+        '' | *[!0-9]*) return 1 ;;
+    esac
+    _animux_cache_now="$(date +%s 2>/dev/null)" || return 1
+    case "$_animux_cache_now" in
+        '' | *[!0-9]*) return 1 ;;
+    esac
+    _animux_cache_age=$((_animux_cache_now - _animux_cache_saved))
+    [ "$_animux_cache_age" -ge 0 ] && [ "$_animux_cache_age" -lt "$2" ] || return 1
+    sed '1d' "$1"
+}
+
+cache_write() {
+    [ "$animux_cache_enabled" = "1" ] || return 0
+    [ -n "$2" ] || return 0
+    _animux_cache_parent=${1%/*}
+    mkdir -p "$_animux_cache_parent" 2>/dev/null || return 0
+    _animux_cache_now="$(date +%s 2>/dev/null)" || return 0
+    _animux_cache_tmp="$1.$$"
+    if (umask 077; { printf '%s\n' "$_animux_cache_now"; printf '%s\n' "$2"; } >"$_animux_cache_tmp"); then
+        mv -f "$_animux_cache_tmp" "$1" 2>/dev/null || rm -f "$_animux_cache_tmp"
+    else
+        rm -f "$_animux_cache_tmp"
+    fi
+}
+
+cache_get_or_run() {
+    _animux_cache_kind="$1"
+    _animux_cache_ttl="$2"
+    _animux_cache_key="$3"
+    shift 3
+
+    if [ "$animux_cache_enabled" != "1" ]; then
+        "$@"
+        return
+    fi
+
+    _animux_cache_hash="$(cache_digest "$_animux_cache_key")" || {
+        "$@"
+        return
+    }
+    _animux_cache_file="$animux_cache_root/$_animux_cache_kind/$_animux_cache_hash"
+    if cache_read "$_animux_cache_file" "$_animux_cache_ttl"; then
+        return 0
+    fi
+
+    _animux_cache_output="$("$@")"
+    _animux_cache_status=$?
+    if [ "$_animux_cache_status" -eq 0 ] && [ -n "$_animux_cache_output" ]; then
+        cache_write "$_animux_cache_file" "$_animux_cache_output"
+    fi
+    printf '%s\n' "$_animux_cache_output"
+    return "$_animux_cache_status"
+}
 
 find_runtime_file() {
     animux_file_name="$1"
@@ -1160,6 +1249,8 @@ help_info() {
       %s -P python-extractor -L es \"one piece\"
 
     Interface:
+      ANIMUX_CACHE=0
+        Disable cached search results and episode metadata
       ANIMUX_COLOR=0
         Disable the terminal color theme
       ANIMUX_REMOTE_ART=0
@@ -1436,7 +1527,7 @@ get_episode_url() {
 }
 
 # search the query and give results
-search_anime() {
+search_anime_uncached() {
     if [ "$provider" = "python-extractor" ]; then
         query_normalized="$(printf "%s" "$1" | sed 's/+/ /g')"
         if [ "$mode" = "dub" ]; then
@@ -1454,6 +1545,12 @@ search_anime() {
     | g' | sed -nE "s|.*_id\":\"([^\"]*)\",\"name\":\"(.+)\",.*${mode}\":([1-9][^,]*).*|\1	\2 (\3 episodes)|p" | sed 's/\\"//g'
 }
 
+search_anime() {
+    _animux_cache_query="$(normalize_cache_value "$1")"
+    _animux_cache_search_key="language=$sub_lang|mode=$mode|provider=$provider|query=$_animux_cache_query"
+    cache_get_or_run search 21600 "$_animux_cache_search_key" search_anime_uncached "$1"
+}
+
 time_until_next_ep() {
     animeschedule="https://animeschedule.net"
     query="$(printf "%s\n" "$*" | tr ' ' '+')"
@@ -1469,7 +1566,7 @@ time_until_next_ep() {
 }
 
 # get the episodes list of the selected anime
-episodes_list() {
+episodes_list_uncached() {
     if [ "$provider" = "python-extractor" ]; then
         if [ "$mode" = "dub" ]; then
             "$animux_anime_extractor" episodes --dub "$1"
@@ -1484,6 +1581,12 @@ episodes_list() {
 
     curl -e "$allanime_refr" -s -H "Content-Type: application/json" -X POST "${allanime_api}/api" --data "{\"variables\":{\"showId\":\"$*\"},\"query\":\"$episodes_list_gql\"}" -A "$agent" | sed -nE "s|.*$mode\":\[([0-9.\",]*)\].*|\1|p" | sed 's|,|\
 |g; s|"||g' | sort -n -k 1
+}
+
+episodes_list() {
+    _animux_cache_episode_provider="$(cache_provider_for_id "$1")"
+    _animux_cache_episode_key="language=$sub_lang|mode=$mode|provider=$_animux_cache_episode_provider|anime_id=$1"
+    cache_get_or_run episodes 86400 "$_animux_cache_episode_key" episodes_list_uncached "$1"
 }
 
 # PLAYING
@@ -1733,6 +1836,9 @@ allanime_refr="https://youtu-chan.com"
 mode="${ANIMUX_MODE:-${ANI_CLI_MODE:-sub}}"
 sub_lang="${ANIMUX_LANG:-${ANI_CLI_LANG:-en}}"
 provider="${ANIMUX_PROVIDER:-${ANI_CLI_PROVIDER:-auto}}"
+animux_cache_enabled="${ANIMUX_CACHE:-${ANI_CLI_CACHE:-1}}"
+[ "$animux_cache_enabled" = "0" ] || animux_cache_enabled=1
+animux_cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/animux"
 provider_referrer="https://jkanime.net"
 allanime_base="allanime.day"
 allanime_api="https://api.${allanime_base}"

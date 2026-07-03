@@ -84,6 +84,11 @@ names remain supported as fallbacks.
 .B ANIMUX_PROVIDER
 Advanced internal provider override: auto, allanime, or jkanime.
 .TP
+.B ANIMUX_CACHE
+Set to 0 to bypass reading and writing cached search results and episode lists.
+The legacy ANI_CLI_CACHE variable is supported as a fallback. Playback URLs,
+resolved embeds, and direct streams are never cached.
+.TP
 .B ANIMUX_PLAYER
 Player command or mode. Common values include mpv, vlc, debug, and download.
 .TP
@@ -123,7 +128,13 @@ Set to 0 to hide the command header.
 Watch history.
 .TP
 .I $XDG_CACHE_HOME/animux
-Downloaded art cache.
+Cached art and metadata; when XDG_CACHE_HOME is unset, the location is
+.IR $HOME/.cache/animux .
+Search results are stored below
+.I search/
+for 6 hours, and episode lists below
+.I episodes/
+for 24 hours.
 .TP
 .I $PREFIX/share/animux/ascii/*.txt
 Random ASCII art collection used by the main menu.

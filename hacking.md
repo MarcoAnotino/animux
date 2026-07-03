@@ -14,7 +14,7 @@ You'll also need a web browser with a debugger and an environment that can run a
 ## The scraping process
 The following upstream flowchart demonstrates how animux operates from a scraping standpoint:
 
-![image](.assets/ani-cli-scraping-flow.png)
+![image](.assets/animux-scraping-flow.png)
 
 The steps to get to a link from a query is the following:
 1. search with the site's search page for the query
@@ -107,4 +107,4 @@ There might be cases that cannot be covered by the current structure of animux, 
 ## UX Spec
 
 The upstream UX spec remains useful when replicating the original behavior in a fresh codebase:
-![image](.assets/ani-cli-ux-spec.png)
+![image](.assets/animux-ux-spec.png)
