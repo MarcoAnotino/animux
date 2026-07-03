@@ -1617,12 +1617,12 @@ playback_loop() {
     [ "$player_function" = "download" ] || [ "$player_function" = "debug" ] && return 0
 
     while :; do
-        launcher_header="enter choose   esc close   $(clean_display_title "$title") · episode $ep_no"
+        launcher_header="enter choose   esc back to episodes   $(clean_display_title "$title") · episode $ep_no"
         cmd=$(printf "next\nreplay\nprevious\nselect episode\nsearch\nchange quality\nquit\n" | nth "  playback  ")
         rc=$?
         unset launcher_header
         if [ "$rc" -eq 130 ] || [ -z "$cmd" ]; then
-            return 0
+            return 130
         fi
 
         case "$cmd" in
@@ -1966,7 +1966,11 @@ interactive_flow() {
                 if [ "$play_rc" -eq 200 ]; then
                     search="scrape"
                     query=""
+                    ep_no=""
                     from_initial_menu=1
+                    continue
+                elif [ "$play_rc" -eq 130 ]; then
+                    ep_no=""
                     continue
                 else
                     cleanup
@@ -2063,7 +2067,10 @@ interactive_flow() {
                         query=""
                         ep_no=""
                         from_initial_menu=1
-                        break 2
+                        break
+                    elif [ "$play_rc" -eq 130 ]; then
+                        ep_no=""
+                        continue
                     else
                         cleanup
                         exit 0
@@ -2136,6 +2143,9 @@ interactive_flow() {
                                 ep_no=""
                                 from_initial_menu=1
                                 break 3
+                            elif [ "$play_rc" -eq 130 ]; then
+                                ep_no=""
+                                continue
                             else
                                 cleanup
                                 exit 0
