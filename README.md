@@ -8,7 +8,10 @@ Animux is a customized and extended project originally based on [pystardust/ani-
 
 ## Preview
 
-[![Animux preview](.assets/animux-preview.png)](.assets/animux-preview.gif)
+
+![Animux preview image](.assets/animux-preview.png)
+
+![Animux preview gif](.assets/animux-preview-gif.gif)
 ---
 
 ## Features
