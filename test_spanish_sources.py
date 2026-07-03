@@ -83,14 +83,19 @@ class TestAnimeAV1Metadata(unittest.TestCase):
 
 
 class TestSpanishFallback(unittest.TestCase):
-    def test_search_preserves_source_priority(self):
-        def source(name, dub=False):
+    def test_search_stops_at_first_non_empty_source(self):
+        calls = []
+
+        def source(name, results=True, dub=False):
             class Extractor:
                 site_name = name
                 supports_dub = dub
                 _VALID_URL = r"$^"
 
                 def search(self, title, dub=False):
+                    calls.append(name)
+                    if not results:
+                        return []
                     return [{
                         "id": f"{name}:id",
                         "title": title,
@@ -110,8 +115,9 @@ class TestSpanishFallback(unittest.TestCase):
 
         self.assertEqual(
             [result["extractor"] for result in results],
-            ["jkanime", "animeflv", "animeav1"],
+            ["jkanime"],
         )
+        self.assertEqual(calls, ["jkanime"])
 
     def test_episode_falls_back_from_jkanime_to_animeflv(self):
         calls = []
@@ -182,6 +188,41 @@ class TestSpanishFallback(unittest.TestCase):
 
         self.assertEqual([item["extractor"] for item in results], ["animeflv"])
 
+    def test_search_falls_back_to_next_source_when_empty(self):
+        calls = []
+
+        def source(name, results=True, dub=False):
+            class Extractor:
+                site_name = name
+                supports_dub = dub
+                _VALID_URL = r"$^"
+
+                def search(self, title, dub=False):
+                    calls.append(name)
+                    if not results:
+                        return []
+                    return [{
+                        "id": f"{name}:id",
+                        "title": title,
+                        "total_episodes": 12,
+                        "extractor": name,
+                    }]
+
+            return Extractor
+
+        orchestrator = AnimeExtractor((
+            source("jkanime", results=False),
+            source("animeflv", results=True, dub=True),
+            source("animeav1", results=True),
+        ))
+
+        results = orchestrator.search("Frieren")
+
+        self.assertEqual(
+            [result["extractor"] for result in results],
+            ["animeflv"],
+        )
+        self.assertEqual(calls, ["jkanime", "animeflv"])
 
 if __name__ == "__main__":
     unittest.main()

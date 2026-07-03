@@ -325,7 +325,7 @@ ui_builtin_art() {
 ui_main_header() {
     # Logo-only: just the box art, no braille — keeps fzf header compact so menu options are visible
     ui_builtin_art logo_only
-    printf "%s%s%s\n" "$ui_accent_alt" '  enter select   esc back   ctrl-c quit' "$ui_reset"
+    printf "%s%s%s\n" "$ui_accent_alt" '  enter select   esc back   ctrl-c quit' "$ui_reset" " "
 }
 
 ui_remote_art() {

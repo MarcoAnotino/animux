@@ -1,46 +1,137 @@
-# animux
+# Animux
 
-Watch anime from your terminal with a polished TUI, English and Spanish subtitle modes, keyboard navigation, and HD cover previews.
+A polished terminal anime browser/player with English and Spanish modes, source fallback, keyboard navigation, cover previews, and macOS/Linux-friendly playback.
 
-animux lets you choose between English and Spanish subtitles. Internally, it selects the best available source for that language.
+Animux is a customized and extended project originally based on [pystardust/ani-cli](https://github.com/pystardust/ani-cli). It keeps the same GPL-3.0 license while adding its own interface, source routing, Spanish subtitle/dub support, extractor-backed fallback behavior, and quality-of-life improvements.
 
-animux is a modified version of [pystardust/ani-cli](https://github.com/pystardust/ani-cli), used as the starting point for this project.
+> Animux does not host, upload, or distribute media files. It only provides a terminal interface for browsing and opening publicly available sources.
 
-The original project is licensed under GPL-3.0, and animux keeps the same license.
+## Preview
+
+![Animux preview](.assets/animux-preview.mp4)
+---
 
 ## Features
 
-- English subtitles
-- Spanish subtitles with internal fallback support
-- Internal source routing
-- Terminal-first anime browser/player
-- Interactive main menu
-- Improved fzf TUI
-- Back navigation with Esc
-- Continue watching / history
-- HD cover art previews
-- macOS and Linux support
-- POSIX shell
+* Terminal-first anime browser/player
+* English subtitle mode
+* Spanish subtitle mode
+* Dub mode where available
+* Sequential Spanish source fallback
+* Interactive `fzf` TUI
+* Keyboard-first navigation
+* Back navigation with `Esc`
+* Continue watching / history support
+* HD cover previews in episode menus
+* Random bundled ASCII art in the main menu
+* macOS and Linux support
+* POSIX shell entrypoint
+* Python-backed internal extractor for Spanish sources
+* Installer and uninstaller scripts
+
+---
+
+## Source routing
+
+Animux automatically chooses the best internal source based on the selected mode.
+
+### English subtitles
+
+English subtitle mode uses the English provider flow.
+
+```text
+English subtitles → AllAnime
+```
+
+### Spanish subtitles
+
+Spanish subtitle search uses sequential fallback. Animux stops at the first source that returns results.
+
+```text
+Spanish subtitles → JKanime → AnimeFLV → AnimeAV1
+```
+
+### Dub mode
+
+Dub search prioritizes sources more likely to expose dubbed entries first.
+
+```text
+Dub mode → AnimeFLV → AnimeAV1 → JKanime
+```
+
+This avoids duplicate search entries and keeps the result list focused.
+
+---
+
+## How it works
+
+```text
+Search query
+    ↓
+Mode selection
+    ↓
+Provider/source routing
+    ↓
+Anime results
+    ↓
+Episode list
+    ↓
+Episode selection
+    ↓
+Embed/source extraction
+    ↓
+Quality selection
+    ↓
+Playback or download
+```
+
+For a more detailed scraping overview, see the flow diagram:
+
+```md
+![Animux scraping flow](.assets/ani-cli-scraping-flow.png)
+```
+
+---
 
 ## Requirements
 
-animux requires `curl`, `fzf`, `mpv`, `ffmpeg`, `perl`, and `openssl`. The extractor-backed Spanish flow also requires `python3`. `chafa` and `ani-skip` are optional.
+Animux requires:
 
-On macOS, dependencies can be installed with Homebrew:
+* `curl`
+* `fzf`
+* `mpv`
+* `ffmpeg`
+* `perl`
+* `openssl`
+* `python3`
+
+Optional:
+
+* `chafa` for richer terminal image previews
+* `ani-skip` for intro skipping with `mpv`
+* `iina-cli` if using IINA on macOS
+
+### macOS
+
+Install dependencies with Homebrew:
 
 ```sh
 brew install curl fzf mpv ffmpeg perl openssl python chafa
 ```
 
+IINA users should install IINA separately and make sure `iina-cli` is available.
+
+---
+
 ## Install
 
-One-command install:
+### One-command install
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/MarcoAnotino/animux/main/install.sh | sh
 ```
 
-Install from a clone:
+### Install from source
 
 ```sh
 git clone https://github.com/MarcoAnotino/animux.git
@@ -48,77 +139,212 @@ cd animux
 ./install.sh
 ```
 
-Local install without sudo:
+### Local install without sudo
 
 ```sh
 PREFIX="$HOME/.local" ./install.sh
 ```
 
-If necessary, add the local binary directory to your shell configuration:
+Add the local binary directory to your shell configuration if needed:
 
 ```sh
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-The default installer selects `/opt/homebrew` when appropriate on Apple Silicon, `/usr/local` when writable, and otherwise `$HOME/.local`. Any explicit `PREFIX` is respected.
+The installer automatically selects a suitable prefix:
+
+* `/opt/homebrew` on Apple Silicon when available
+* `/usr/local` when writable
+* `$HOME/.local` as a fallback
+
+Any explicit `PREFIX` is respected.
+
+---
 
 ## Usage
 
+Start the interactive menu:
+
 ```sh
 animux
+```
+
+Search with Spanish subtitles:
+
+```sh
 animux -L es "one piece"
+```
+
+Search with English subtitles:
+
+```sh
 animux -L en "demon slayer"
+```
+
+Continue watching from history:
+
+```sh
 animux -c
 ```
 
-Legacy environment variables remain compatible:
+Request dubbed media where available:
+
+```sh
+animux --dub -L es "dragon ball"
+```
+
+Select a specific result and episode:
+
+```sh
+animux -L es -S 1 -e 1 "frieren"
+```
+
+Download instead of play:
+
+```sh
+animux -d -L es "one piece"
+```
+
+---
+
+## Options
+
+```text
+-L, --language en|es        Select subtitle language
+-P, --provider PROVIDER     Force an internal provider
+-S, --select-nth INDEX      Select the nth search result
+-e, --episode EPISODE       Select an episode or episode range
+-r, --range RANGE           Select an episode range
+-q, --quality QUALITY       Preferred stream quality
+-c, --continue              Continue from watch history
+-d, --download              Download instead of playing
+-D, --delete                Delete history
+-l, --logview               Show logs
+-v, --vlc                   Use VLC
+-V, --version               Show version
+-h, --help                  Show help
+    --dub                   Request dubbed media
+    --rofi                  Use rofi instead of fzf
+    --dmenu                 Use dmenu instead of fzf
+    --skip                  Enable intro skipping with mpv
+    --no-detach             Keep the player attached
+    --exit-after-play       Exit after playback
+```
+
+Run the full help page:
+
+```sh
+animux --help
+```
+
+---
+
+## Keyboard controls
+
+```text
+Enter    Select
+Esc      Back
+Ctrl+C   Quit
+Tab      Multi-select
+```
+
+---
+
+## Provider override
+
+Most users do not need this. Animux chooses a source automatically based on the selected language/mode.
+
+```sh
+animux -P allanime -L en "frieren"
+animux -P python-extractor -L es "one piece"
+```
+
+Legacy provider aliases are kept for compatibility where possible.
+
+---
+
+## Configuration
+
+Animux uses the `ANIMUX_*` environment namespace.
+
+Common variables:
+
+```text
+ANIMUX_PROVIDER
+ANIMUX_PLAYER
+ANIMUX_DOWNLOAD_DIR
+ANIMUX_QUALITY
+ANIMUX_LOG
+ANIMUX_HIST_DIR
+ANIMUX_LIBEXEC_DIR
+ANIMUX_SHARE_DIR
+ANIMUX_BUILTIN_ART
+ANIMUX_ASCII_ART
+ANIMUX_ASCII_ART_DIR
+ANIMUX_RANDOM_ASCII_ART
+ANIMUX_NO_HEADER
+ANIMUX_HEADER
+ANIMUX_EPISODE_ART
+ANIMUX_EPISODE_ART_SIZE
+```
+
+Legacy `ANI_CLI_*` variables are also supported as fallbacks for compatibility with existing setups.
+
+Example:
+
+```sh
+ANIMUX_PLAYER=debug animux -L es -S 1 -e 1 "one piece"
+```
+
+Legacy example:
 
 ```sh
 ANI_CLI_PLAYER=debug animux -L es -S 1 -e 1 "one piece"
 ```
 
-## Options
+---
+
+## Data locations
+
+History is stored at:
 
 ```text
--L, --language en|es                   subtitle language
--P, --provider PROVIDER                advanced internal provider override
--S, --select-nth INDEX                 select the nth menu entry
--e, --episode EPISODE                  select an episode or range
--q, --quality QUALITY                  preferred stream quality
--c, --continue                         continue from watch history
--d, --download                         download instead of playing
--l, --logview                          show logs
-    --dub                              request dubbed media
-    --rofi                             use rofi instead of fzf
-    --dmenu                            use dmenu instead of fzf
-    --skip                             enable intro skipping with mpv
-    --no-detach                        keep the player attached
-    --exit-after-play                  exit after playback
+${XDG_STATE_HOME:-$HOME/.local/state}/animux/ani-hsts
 ```
 
-Run `animux --help` for the complete command reference.
-
-### Advanced provider override
-
-Most users should not need this. animux chooses a source automatically from the selected subtitle language.
-
-```sh
-animux -P allanime -L en "frieren"
-animux -P jkanime -L es "one piece"
-```
-
-## Keyboard
+Cached art is stored at:
 
 ```text
-Enter  select
-Esc    back
-Ctrl+C quit
-Tab    multi-select
+${XDG_CACHE_HOME:-$HOME/.cache}/animux
 ```
+
+On first use, Animux can copy an existing `ani-cli/ani-hsts` history file when the new Animux history file does not exist. The original history file is not removed.
+
+---
+
+## Installed layout
+
+```text
+$PREFIX/bin/animux
+$PREFIX/libexec/animux/anime-extractor
+$PREFIX/libexec/animux/extractor.py
+$PREFIX/share/animux/menuPixelArt.txt
+$PREFIX/share/animux/asciiArt.txt
+$PREFIX/share/animux/ascii/*.txt
+$PREFIX/share/man/man1/animux.1
+```
+
+In a source checkout, bundled ASCII art lives in:
+
+```text
+assets/ascii/
+```
+
+---
 
 ## ASCII art
 
-animux ships with a small collection of ASCII arts for the main menu. By default, one is selected randomly on each run and remains fixed for that process.
+Animux ships with a small collection of ASCII art files for the main menu. By default, one is selected randomly on each run.
 
 Disable random art:
 
@@ -138,74 +364,107 @@ Use a custom art directory:
 ANIMUX_ASCII_ART_DIR=/path/to/ascii animux
 ```
 
-## Configuration and data
+Disable remote art:
 
-New configuration uses the `ANIMUX_*` namespace. Equivalent `ANI_CLI_*` variables are accepted as fallbacks, including `ANI_CLI_PLAYER=debug`.
-
-Common variables include `ANIMUX_PROVIDER`, `ANIMUX_PLAYER`, `ANIMUX_DOWNLOAD_DIR`, `ANIMUX_QUALITY`, `ANIMUX_LOG`, `ANIMUX_HIST_DIR`, `ANIMUX_LIBEXEC_DIR`, `ANIMUX_SHARE_DIR`, `ANIMUX_BUILTIN_ART`, `ANIMUX_ASCII_ART`, `ANIMUX_ASCII_ART_DIR`, `ANIMUX_RANDOM_ASCII_ART`, `ANIMUX_NO_HEADER`, and `ANIMUX_HEADER`.
-
-History is stored at `${XDG_STATE_HOME:-$HOME/.local/state}/animux/ani-hsts`, and cached art is stored at `${XDG_CACHE_HOME:-$HOME/.cache}/animux`. On first use, animux copies an existing `ani-cli/ani-hsts` history file when the new history does not exist; the old file is not removed.
-
-The installed layout is:
-
-```text
-$PREFIX/bin/animux
-$PREFIX/libexec/animux/anime-extractor
-$PREFIX/libexec/animux/extractor.py
-$PREFIX/share/animux/menuPixelArt.txt
-$PREFIX/share/animux/asciiArt.txt
-$PREFIX/share/animux/ascii/*.txt
-$PREFIX/share/man/man1/animux.1
+```sh
+ANIMUX_REMOTE_ART=0 animux
 ```
 
-In a source checkout, `assets/ascii/` contains the random main-menu ASCII art collection.
+Disable episode cover previews:
+
+```sh
+ANIMUX_EPISODE_ART=0 animux
+```
+
+---
 
 ## Development
 
-Run the source script directly and validate all POSIX shell entry points:
+Run Animux directly from a source checkout:
 
 ```sh
-./animux --help
+./animux
+```
+
+Run basic validation:
+
+```sh
 make check
 ```
 
-No Bash-specific shell features are required.
+Validate Python extractor files:
+
+```sh
+python3 -m py_compile extractor.py test_spanish_sources.py
+python3 test_spanish_sources.py
+```
+
+Run extractor tests:
+
+```sh
+python3 -m unittest test_animeflv_extractor.py test_extractor.py
+```
+
+No Bash-specific shell features are required for the main entrypoint.
+
+---
 
 ## Uninstall
+
+### One-command uninstall
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/MarcoAnotino/animux/main/uninstall.sh | sh
 ```
 
-Or, from a clone:
+### Uninstall from source
 
 ```sh
 ./uninstall.sh
 ```
 
-Use the same `PREFIX` supplied during installation for a custom-prefix uninstall. Cache and history are intentionally preserved.
+Use the same `PREFIX` supplied during installation if you installed to a custom prefix.
+
+Cache and history are intentionally preserved.
+
+---
 
 ## Credits
 
-animux is based on [pystardust/ani-cli](https://github.com/pystardust/ani-cli), licensed under GPL-3.0.
+Animux is based on [pystardust/ani-cli](https://github.com/pystardust/ani-cli), licensed under GPL-3.0.
 
-Original project:
+This project started from that foundation and has been modified with:
 
-- pystardust/ani-cli
+* redesigned terminal interface
+* improved interactive navigation
+* language-first mode selection
+* Spanish subtitle support
+* dub mode support where available
+* sequential Spanish source fallback
+* extractor-backed Spanish provider routing
+* HD cover previews
+* bundled ASCII art support
+* install/uninstall flow improvements
+* macOS/Linux packaging improvements
 
-animux modifications:
+Thanks to the original `ani-cli` project and its contributors for the foundation that made this project possible.
 
-- enhanced TUI/navigation
-- language-first subtitle selection
-- internal source routing and extractor-backed Spanish support
-- HD cover art previews
-- install/uninstall flow
-- macOS/Linux packaging improvements
+See [LICENSE](LICENSE) for the full GPL-3.0 license text.
 
-See [NOTICE](NOTICE) for attribution and [LICENSE](LICENSE) for the full GPL-3.0 license text.
+---
+
+## License
+
+Animux is distributed under the GNU General Public License v3.0.
+
+Because this project is based on `ani-cli`, it keeps the same license and includes attribution to the original project.
+
+---
 
 ## Legal disclaimer
 
-animux does not host or distribute media files. It is a terminal interface for browsing and opening publicly available sources. Users are responsible for complying with applicable laws in their region.
+Animux does not host, upload, store, or distribute media files.
 
-animux is not an official client of any provider or website.
+It is a terminal interface for browsing and opening publicly available sources. Users are responsible for complying with applicable laws and the terms of service of any websites or providers they access.
+
+Animux is not affiliated with, endorsed by, or officially connected to any anime provider, streaming website, or media distributor.
