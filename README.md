@@ -90,9 +90,7 @@ Playback or download
 
 For a more detailed scraping overview, see the flow diagram:
 
-```md
 ![Animux scraping flow](.assets/ani-cli-scraping-flow.png)
-```
 
 ---
 
