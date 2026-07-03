@@ -1,0 +1,42 @@
+name: Shell Check
+
+on:
+  push:
+    paths:
+      - 'animux'
+      - 'anime-extractor'
+      - 'extractor.py'
+      - 'test_extractor.py'
+      - 'test_animeflv_extractor.py'
+      - 'play_jkanime.sh'
+      - 'install.sh'
+      - 'uninstall.sh'
+      - 'Makefile'
+      - '.github/workflows/shellcheck.yml'
+  pull_request:
+    paths:
+      - 'animux'
+      - 'anime-extractor'
+      - 'extractor.py'
+      - 'test_extractor.py'
+      - 'test_animeflv_extractor.py'
+      - 'play_jkanime.sh'
+      - 'install.sh'
+      - 'uninstall.sh'
+      - 'Makefile'
+      - '.github/workflows/shellcheck.yml'
+
+jobs:
+  syntax:
+    name: POSIX syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: sh -n syntax check
+        run: |
+          sh -n animux
+          sh -n anime-extractor
+          if [ -f play_jkanime.sh ]; then sh -n play_jkanime.sh; fi
+          sh -n install.sh
+          sh -n uninstall.sh
+          python3 -m unittest

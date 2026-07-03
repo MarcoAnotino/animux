@@ -1,0 +1,24 @@
+# Logs
+debug.log
+*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# macOS
+.DS_Store
+
+# Cover art cache (stored in ~/.cache/animux)
+*.cache
+
+# Temp preview files
+/tmp/animux-*
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

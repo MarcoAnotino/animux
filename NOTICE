@@ -1,0 +1,13 @@
+animux
+
+animux is a modified version of pystardust/ani-cli, which was used as the
+starting point for this project:
+
+https://github.com/pystardust/ani-cli
+
+The upstream project and this modified project are distributed under the GNU
+General Public License, version 3. See LICENSE for the complete license text.
+
+The animux name, interface changes, provider-selection work, Spanish subtitle
+support, cover previews, and packaging changes identify modifications made by
+the animux project. Upstream authorship remains credited to pystardust/ani-cli.

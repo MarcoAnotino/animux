@@ -1,0 +1,100 @@
+#!/bin/sh
+
+# Accept legacy URLs or a structured search/episodes/episode command.
+if [ "$#" -lt 1 ]; then
+    printf '%s\n' "Usage: anime-extractor <url> [fallback-url ...]" >&2
+    printf '%s\n' "       anime-extractor search [--dub] <title>" >&2
+    printf '%s\n' "       anime-extractor episodes [--dub] <id>" >&2
+    printf '%s\n' "       anime-extractor episode [--dub] <id> <episode> [title]" >&2
+    exit 1
+fi
+
+script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)" || {
+    printf '%s\n' "anime-extractor: cannot determine its install directory" >&2
+    exit 1
+}
+
+if [ ! -r "$script_dir/extractor.py" ]; then
+    printf '%s\n' "anime-extractor: extractor.py not found in $script_dir" >&2
+    exit 1
+fi
+
+if [ "${ANIMUX_JKANIME_EXTRACTOR_TIMEOUT+x}" = x ]; then
+    ANI_CLI_JKANIME_EXTRACTOR_TIMEOUT="$ANIMUX_JKANIME_EXTRACTOR_TIMEOUT"
+    export ANI_CLI_JKANIME_EXTRACTOR_TIMEOUT
+fi
+if [ "${ANIMUX_JKANIME_MAX_TIME+x}" = x ]; then
+    ANI_CLI_JKANIME_MAX_TIME="$ANIMUX_JKANIME_MAX_TIME"
+    export ANI_CLI_JKANIME_MAX_TIME
+fi
+if [ "${ANIMUX_JKANIME_YTDLP_TIMEOUT+x}" = x ]; then
+    ANI_CLI_JKANIME_YTDLP_TIMEOUT="$ANIMUX_JKANIME_YTDLP_TIMEOUT"
+    export ANI_CLI_JKANIME_YTDLP_TIMEOUT
+fi
+
+exec python3 - "$script_dir" "$@" <<'PYTHON'
+import sys
+
+sys.path.insert(0, sys.argv[1])
+from extractor import AnimeExtractor
+
+extractor = AnimeExtractor()
+args = sys.argv[2:]
+
+if args[0] in {"search", "episodes", "episode"}:
+    command = args.pop(0)
+    dub = False
+    if args and args[0] == "--dub":
+        dub = True
+        args.pop(0)
+    try:
+        if command == "search":
+            if not args:
+                raise ValueError("Falta el título para buscar.")
+            query = " ".join(args)
+            for result in extractor.search(query, dub=dub):
+                identifier = str(result["id"]).replace("\t", " ").replace("\n", " ")
+                title = str(result["title"]).replace("\t", " ").replace("\n", " ")
+                print(f"{identifier}\t{title} ({result['total_episodes']} episodes)")
+        elif command == "episodes":
+            if len(args) != 1:
+                raise ValueError("episodes requiere exactamente un identificador.")
+            for number in extractor.list_episodes(args[0], dub=dub):
+                print(number)
+        else:
+            if len(args) < 2:
+                raise ValueError("episode requiere un identificador y un episodio.")
+            identifier, number = args[:2]
+            title = args[2] if len(args) > 2 else None
+            result = extractor.get_episode(
+                identifier, number, dub=dub, title=title
+            )
+            print("best >" + result["url"])
+            if result.get("referer"):
+                print("referer >" + result["referer"])
+            print("extractor >" + result["extractor"], file=sys.stderr)
+    except Exception as exc:
+        print(f"[animux] {command} falló: {exc}", file=sys.stderr)
+        sys.exit(1)
+    sys.exit(0)
+
+urls = args
+
+for url in urls:
+    try:
+        print(f"[animux] Intentando extraer de: {url}", file=sys.stderr)
+        data = extractor.extract(url)
+        formats = data.get("formats", []) if data else []
+        
+        if not formats:
+            raise RuntimeError("No se encontraron formatos de video válidos.")
+            
+        print("best >" + formats[0]["url"])
+        sys.exit(0)
+        
+    except Exception as exc:
+        print(f"[animux] Fallo en {url}: {exc}", file=sys.stderr)
+
+print("[animux] Ningún extractor interno devolvió un stream válido.", file=sys.stderr)
+sys.exit(1)
+PYTHON

@@ -1,0 +1,152 @@
+.TH ANIMUX 1 "July 3, 2026" "animux 4.14.1" "User Commands"
+.SH NAME
+animux \- browse and watch anime from your terminal
+.SH SYNOPSIS
+.B animux
+[\fIOPTIONS\fR] [\fIQUERY\fR]
+.SH DESCRIPTION
+.B animux
+is a POSIX shell CLI/TUI for browsing and playing anime on macOS and Linux.
+It supports English and Spanish subtitle modes. Internally, animux routes each
+language to the best available source.
+.SH OPTIONS
+.TP
+.BR \-c ", " \-\-continue
+Continue watching from history.
+.TP
+.BR \-d ", " \-\-download
+Download instead of playing.
+.TP
+.BR \-D ", " \-\-delete
+Delete watch history.
+.TP
+.BR \-l ", " \-\-logview
+Show logs.
+.TP
+.BR \-e ", " \-\-episode ", " \-r ", " \-\-range " " \fIEPISODE\fR"
+Select one episode or an episode range.
+.TP
+.BR \-h ", " \-\-help
+Show command help.
+.TP
+.BR \-L ", " \-\-language " " \fILANG\fR"
+Select subtitle language: en or es.
+.TP
+.BR \-P ", " \-\-provider " " \fIPROVIDER\fR"
+Advanced: force an internal provider. Usually not needed. Most users should use
+.BR \-L " en"
+or
+.BR \-L " es"
+instead.
+.TP
+.BR \-q ", " \-\-quality " " \fIQUALITY\fR"
+Set best, worst, 360, 480, 720, or 1080.
+.TP
+.BR \-S ", " \-\-select-nth " " \fIINDEX\fR"
+Select the nth menu entry.
+.TP
+.BR \-s ", " \-\-syncplay
+Play through Syncplay.
+.TP
+.BR \-U ", " \-\-update
+Update the source script from the animux repository.
+.TP
+.BR \-V ", " \-\-version
+Print the version.
+.TP
+.BR \-v ", " \-\-vlc
+Use VLC as the player.
+.TP
+.BR \-\-dmenu
+Use dmenu instead of fzf.
+.TP
+.BR \-\-dub
+Use dubbed media where supported.
+.TP
+.BR \-\-exit-after-play
+Exit after playback and return the player status.
+.TP
+.BR \-\-no-detach
+Keep the player attached to the terminal.
+.TP
+.BR \-\-rofi
+Use rofi instead of fzf.
+.TP
+.BR \-\-skip
+Use ani-skip to skip intros with mpv.
+.SH ENVIRONMENT
+The public configuration namespace is
+.BR ANIMUX_* .
+The corresponding legacy
+.B ANI_CLI_*
+names remain supported as fallbacks.
+.TP
+.B ANIMUX_PROVIDER
+Advanced internal provider override: auto, allanime, or jkanime.
+.TP
+.B ANIMUX_PLAYER
+Player command or mode. Common values include mpv, vlc, debug, and download.
+.TP
+.B ANIMUX_HIST_DIR
+Watch-history directory. The default is
+.IR $XDG_STATE_HOME/animux ,
+or
+.IR $HOME/.local/state/animux .
+.TP
+.B ANIMUX_LIBEXEC_DIR
+Directory containing anime-extractor and extractor.py.
+.TP
+.B ANIMUX_SHARE_DIR
+Directory containing bundled art assets.
+.TP
+.B ANIMUX_BUILTIN_ART
+Explicit path to menuPixelArt.txt.
+.TP
+.B ANIMUX_ASCII_ART
+Explicit path to a single ASCII art file. When set, this overrides the random
+collection.
+.TP
+.B ANIMUX_ASCII_ART_DIR
+Directory containing random ASCII art files for the main menu.
+.TP
+.B ANIMUX_RANDOM_ASCII_ART
+Set to 0 to disable random ASCII art and use the bundled asciiArt.txt fallback.
+.TP
+.B ANIMUX_NO_HEADER
+Set to 1 to hide the command header.
+.TP
+.B ANIMUX_HEADER
+Set to 0 to hide the command header.
+.SH FILES
+.TP
+.I $XDG_STATE_HOME/animux/ani-hsts
+Watch history.
+.TP
+.I $XDG_CACHE_HOME/animux
+Downloaded art cache.
+.TP
+.I $PREFIX/share/animux/ascii/*.txt
+Random ASCII art collection used by the main menu.
+.SH EXAMPLES
+.nf
+animux
+animux -L es "one piece"
+animux -L en "demon slayer"
+animux -c
+animux -q 720p "frieren"
+.fi
+.SS Advanced provider override
+Most users should not need this because animux selects an internal source from
+the requested subtitle language.
+.nf
+animux -P allanime -L en "frieren"
+animux -P jkanime -L es "one piece"
+.fi
+.SH PROJECT
+https://github.com/MarcoAnotino/animux
+.SH CREDITS
+animux is a modified version of pystardust/ani-cli, which was used as the
+starting point for this project:
+https://github.com/pystardust/ani-cli
+.SH LICENSE
+GNU General Public License v3.0 or later.
