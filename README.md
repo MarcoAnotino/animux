@@ -1,5 +1,7 @@
 # Animux
 
+![Animux image](.assets/animux.png)
+
 A polished terminal anime browser/player with English and Spanish modes, source fallback, keyboard navigation, cover previews, and macOS/Linux-friendly playback.
 
 Animux is a customized and extended project originally based on [pystardust/ani-cli](https://github.com/pystardust/ani-cli). It keeps the same GPL-3.0 license while adding its own interface, source routing, Spanish subtitle/dub support, extractor-backed fallback behavior, and quality-of-life improvements.
