@@ -9,6 +9,14 @@ animux \- browse and watch anime from your terminal
 is a POSIX shell CLI/TUI for browsing and playing anime on macOS and Linux.
 It supports English and Spanish subtitle modes. Internally, animux routes each
 language to the best available source.
+.PP
+Source fallback order is:
+.IP \(bu 2
+Spanish subtitles: JKanime, AnimeFLV, AnimeFenix, TioAnime, AnimeAV1.
+.IP \(bu 2
+Spanish dub: MonosChinos, AnimeFLV, AnimeAV1.
+.IP \(bu 2
+English: AllAnime first, then Gogoanime when search or episode resolution fails.
 .SH OPTIONS
 .TP
 .BR \-c ", " \-\-continue
@@ -99,7 +107,8 @@ or
 .IR $HOME/.local/state/animux .
 .TP
 .B ANIMUX_LIBEXEC_DIR
-Directory containing anime-extractor and extractor.py.
+Directory containing anime-extractor, extractor.py, and the extractors Python
+package.
 .TP
 .B ANIMUX_SHARE_DIR
 Directory containing bundled art assets.
@@ -145,6 +154,9 @@ animux -L es "one piece"
 animux -L en "demon slayer"
 animux -c
 animux -q 720p "frieren"
+anime-extractor search --lang es "frieren"
+anime-extractor search --lang es --dub "dragon ball"
+anime-extractor search --lang en "solo leveling"
 .fi
 .SS Advanced provider override
 Most users should not need this because animux selects an internal source from

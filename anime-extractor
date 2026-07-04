@@ -3,9 +3,9 @@
 # Accept legacy URLs or a structured search/episodes/episode command.
 if [ "$#" -lt 1 ]; then
     printf '%s\n' "Usage: anime-extractor <url> [fallback-url ...]" >&2
-    printf '%s\n' "       anime-extractor search [--dub] <title>" >&2
-    printf '%s\n' "       anime-extractor episodes [--dub] <id>" >&2
-    printf '%s\n' "       anime-extractor episode [--dub] <id> <episode> [title]" >&2
+    printf '%s\n' "       anime-extractor search [--lang en|es] [--dub] <title>" >&2
+    printf '%s\n' "       anime-extractor episodes [--lang en|es] [--dub] <id>" >&2
+    printf '%s\n' "       anime-extractor episode [--lang en|es] [--dub] <id> <episode> [title]" >&2
     exit 1
 fi
 
@@ -36,38 +36,37 @@ exec python3 - "$script_dir" "$@" <<'PYTHON'
 import sys
 
 sys.path.insert(0, sys.argv[1])
-from extractor import AnimeExtractor
+from extractor import AnimeExtractor, parse_command_options
 
 extractor = AnimeExtractor()
 args = sys.argv[2:]
 
 if args[0] in {"search", "episodes", "episode"}:
     command = args.pop(0)
-    dub = False
-    if args and args[0] == "--dub":
-        dub = True
-        args.pop(0)
     try:
+        lang, dub, args = parse_command_options(args)
         if command == "search":
             if not args:
                 raise ValueError("Falta el título para buscar.")
             query = " ".join(args)
-            for result in extractor.search(query, dub=dub):
+            for result in extractor.search(query, dub=dub, lang=lang):
                 identifier = str(result["id"]).replace("\t", " ").replace("\n", " ")
                 title = str(result["title"]).replace("\t", " ").replace("\n", " ")
                 print(f"{identifier}\t{title} ({result['total_episodes']} episodes)")
         elif command == "episodes":
             if len(args) != 1:
                 raise ValueError("episodes requiere exactamente un identificador.")
-            for number in extractor.list_episodes(args[0], dub=dub):
+            for number in extractor.list_episodes(
+                args[0], dub=dub, lang=lang
+            ):
                 print(number)
         else:
             if len(args) < 2:
                 raise ValueError("episode requiere un identificador y un episodio.")
             identifier, number = args[:2]
-            title = args[2] if len(args) > 2 else None
+            title = " ".join(args[2:]) if len(args) > 2 else None
             result = extractor.get_episode(
-                identifier, number, dub=dub, title=title
+                identifier, number, dub=dub, title=title, lang=lang
             )
             print("best >" + result["url"])
             if result.get("referer"):

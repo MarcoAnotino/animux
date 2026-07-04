@@ -45,6 +45,10 @@ cache_provider_for_id() {
         jkanime:*) printf '%s' jkanime ;;
         animeflv:*) printf '%s' animeflv ;;
         animeav1:*) printf '%s' animeav1 ;;
+        animefenix:*) printf '%s' animefenix ;;
+        tioanime:*) printf '%s' tioanime ;;
+        monoschino:*) printf '%s' monoschino ;;
+        gogoanime:*) printf '%s' gogoanime ;;
         *) printf '%s' "$provider" ;;
     esac
 }
@@ -1116,8 +1120,14 @@ resolve_provider() {
 
 provider_label() {
     case "$provider" in
-        allanime) printf "AllAnime" ;;
-        python-extractor) printf "JKanime → AnimeFLV → AnimeAV1" ;;
+        allanime) printf "AllAnime → Gogoanime fallback" ;;
+        python-extractor)
+            case "$sub_lang:$mode" in
+                es:dub) printf "MonosChinos → AnimeFLV → AnimeAV1" ;;
+                es:*) printf "JKanime → AnimeFLV → AnimeFenix → TioAnime → AnimeAV1" ;;
+                en:*) printf "Gogoanime" ;;
+            esac
+            ;;
         *) printf "%s" "$provider" ;;
     esac
 }
@@ -1464,32 +1474,62 @@ get_filemoon_links() {
     printf "\033[1;32m%s\033[0m Links Fetched\n" "Filemoon" 1>&2
 }
 
+is_python_extractor_id() {
+    case "$1" in
+        jkanime:* | animeflv:* | animeav1:* | animefenix:* | tioanime:* | monoschino:* | gogoanime:* | *jkanime.net* | *animeflv.* | *animeav1.com* | *animefenix2.tv* | *tioanime.com* | *monoschino2.com* | *gogoanime.by*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+route_provider_for_id() {
+    case "$1" in
+        jkanime:* | animeflv:* | animeav1:* | animefenix:* | tioanime:* | monoschino:* | *jkanime.net* | *animeflv.* | *animeav1.com* | *animefenix2.tv* | *tioanime.com* | *monoschino2.com*)
+            provider="python-extractor"
+            sub_lang="es"
+            ;;
+        gogoanime:* | *gogoanime.by*)
+            provider="python-extractor"
+            sub_lang="en"
+            ;;
+    esac
+}
+
+python_extractor_stream() {
+    _animux_python_id="$1"
+    _animux_python_lang="$2"
+    _animux_python_title="$3"
+    [ -n "$animux_anime_extractor" ] && [ -x "$animux_anime_extractor" ] || return 1
+    if [ "$mode" = "dub" ]; then
+        stream_output="$("$animux_anime_extractor" episode --lang "$_animux_python_lang" --dub "$_animux_python_id" "$ep_no" "$_animux_python_title" 2>&1)" || true
+    else
+        stream_output="$("$animux_anime_extractor" episode --lang "$_animux_python_lang" "$_animux_python_id" "$ep_no" "$_animux_python_title" 2>&1)" || true
+    fi
+    links="$(printf "%s\n" "$stream_output" | grep -E '^[^>]+ >https?://' | head -n1)"
+    [ -n "$links" ] || return 1
+    episode=""
+    select_quality "$quality"
+    [ -n "$episode" ] || return 1
+    provider_referrer="$(printf "%s\n" "$stream_output" | sed -n 's/^referer >//p' | head -n1)"
+    if [ -z "$provider_referrer" ]; then
+        case "$_animux_python_lang" in
+            en) provider_referrer="https://gogoanime.by" ;;
+            *) provider_referrer="https://jkanime.net" ;;
+        esac
+    fi
+    refr_flag="--referrer=$provider_referrer"
+}
+
 # gets embed urls, collects direct links into provider files, selects one with desired quality into $episode
 get_episode_url() {
-    if [ "$provider" = "python-extractor" ]; then
+    if [ "$provider" = "python-extractor" ] || is_python_extractor_id "$id"; then
         [ -n "$animux_anime_extractor" ] && [ -x "$animux_anime_extractor" ] ||
             die "Internal anime extractor helper not found. Reinstall animux or set ANIMUX_LIBEXEC_DIR."
         extractor_title="$(clean_display_title "$title")"
-        if [ "$mode" = "dub" ]; then
-            stream_output="$("$animux_anime_extractor" episode --dub "$id" "$ep_no" "$extractor_title" 2>&1 || true)"
-        else
-            stream_output="$("$animux_anime_extractor" episode "$id" "$ep_no" "$extractor_title" 2>&1 || true)"
-        fi
-        links="$(printf "%s\n" "$stream_output" | grep -E '^[^>]+ >https?://' | head -n1)"
-
-        if [ -z "$links" ]; then
+        extractor_lang="$sub_lang"
+        case "$id" in gogoanime:*) extractor_lang="en" ;; esac
+        if ! python_extractor_stream "$id" "$extractor_lang" "$extractor_title"; then
             die "No se pudo extraer el stream con el extractor de Python. Última salida: $(printf '%s' "$stream_output" | tail -n 3 | tr '\n' ' ')"
         fi
-
-        select_quality "$quality"
-
-        if [ -z "$episode" ]; then
-            die "El extractor devolvió salida, pero no se pudo seleccionar una URL válida."
-        fi
-
-        provider_referrer="$(printf "%s\n" "$stream_output" | sed -n 's/^referer >//p' | head -n1)"
-        [ -n "$provider_referrer" ] || provider_referrer="https://jkanime.net"
-        refr_flag="--referrer=$provider_referrer"
         return
     fi
 
@@ -1519,6 +1559,19 @@ get_episode_url() {
     links=$(cat "$cache_dir"/* | sort -g -r -s)
     rm -r "$cache_dir"
     select_quality "$quality"
+    if [ -z "$episode" ] && [ "$sub_lang" = "en" ] && [ -x "$animux_anime_extractor" ]; then
+        extractor_title="$(clean_display_title "$title")"
+        if [ "$mode" = "dub" ]; then
+            _animux_gogo_results="$("$animux_anime_extractor" search --lang en --dub "$extractor_title" 2>&1)" || true
+        else
+            _animux_gogo_results="$("$animux_anime_extractor" search --lang en "$extractor_title" 2>&1)" || true
+        fi
+        _animux_gogo_id="$(printf '%s\n' "$_animux_gogo_results" | sed -n '/^gogoanime:/s/[[:space:]].*//p' | head -n1)"
+        if [ -n "$_animux_gogo_id" ]; then
+            printf '%s\n' "[animux] AllAnime no resolvió el episodio; probando Gogoanime." >&2
+            python_extractor_stream "$_animux_gogo_id" en "$extractor_title" || true
+        fi
+    fi
     if printf "%s" "$ep_list" | grep -q "^$ep_no$"; then
         [ -z "$episode" ] && die "Episode is released, but no valid sources!"
     else
@@ -1531,9 +1584,9 @@ search_anime_uncached() {
     if [ "$provider" = "python-extractor" ]; then
         query_normalized="$(printf "%s" "$1" | sed 's/+/ /g')"
         if [ "$mode" = "dub" ]; then
-            "$animux_anime_extractor" search --dub "$query_normalized"
+            "$animux_anime_extractor" search --lang "$sub_lang" --dub "$query_normalized"
         else
-            "$animux_anime_extractor" search "$query_normalized"
+            "$animux_anime_extractor" search --lang "$sub_lang" "$query_normalized"
         fi
         return
     fi
@@ -1541,8 +1594,21 @@ search_anime_uncached() {
     #shellcheck disable=SC2016
     search_gql='query( $search: SearchInput $limit: Int $page: Int $translationType: VaildTranslationTypeEnumType $countryOrigin: VaildCountryOriginEnumType ) { shows( search: $search limit: $limit page: $page translationType: $translationType countryOrigin: $countryOrigin ) { edges { _id name availableEpisodes __typename } }}'
 
-    curl -e "$allanime_refr" -s -H "Content-Type: application/json" -X POST "${allanime_api}/api" --data "{\"variables\":{\"search\":{\"allowAdult\":false,\"allowUnknown\":false,\"query\":\"$1\"},\"limit\":40,\"page\":1,\"translationType\":\"$mode\",\"countryOrigin\":\"ALL\"},\"query\":\"$search_gql\"}" -A "$agent" | sed 's|Show|\
-    | g' | sed -nE "s|.*_id\":\"([^\"]*)\",\"name\":\"(.+)\",.*${mode}\":([1-9][^,]*).*|\1	\2 (\3 episodes)|p" | sed 's/\\"//g'
+    _animux_allanime_results="$(curl -e "$allanime_refr" -s -H "Content-Type: application/json" -X POST "${allanime_api}/api" --data "{\"variables\":{\"search\":{\"allowAdult\":false,\"allowUnknown\":false,\"query\":\"$1\"},\"limit\":40,\"page\":1,\"translationType\":\"$mode\",\"countryOrigin\":\"ALL\"},\"query\":\"$search_gql\"}" -A "$agent" | sed 's|Show|\
+    | g' | sed -nE "s|.*_id\":\"([^\"]*)\",\"name\":\"(.+)\",.*${mode}\":([1-9][^,]*).*|\1	\2 (\3 episodes)|p" | sed 's/\\"//g')"
+    if [ -n "$_animux_allanime_results" ]; then
+        printf '%s\n' "$_animux_allanime_results"
+        return
+    fi
+    if [ "$sub_lang" = "en" ] && [ -x "$animux_anime_extractor" ]; then
+        query_normalized="$(printf "%s" "$1" | sed 's/+/ /g')"
+        printf '%s\n' "[animux] AllAnime no devolvió resultados; probando Gogoanime." >&2
+        if [ "$mode" = "dub" ]; then
+            "$animux_anime_extractor" search --lang en --dub "$query_normalized"
+        else
+            "$animux_anime_extractor" search --lang en "$query_normalized"
+        fi
+    fi
 }
 
 search_anime() {
@@ -1567,11 +1633,13 @@ time_until_next_ep() {
 
 # get the episodes list of the selected anime
 episodes_list_uncached() {
-    if [ "$provider" = "python-extractor" ]; then
+    if [ "$provider" = "python-extractor" ] || is_python_extractor_id "$1"; then
+        extractor_lang="$sub_lang"
+        case "$1" in gogoanime:*) extractor_lang="en" ;; esac
         if [ "$mode" = "dub" ]; then
-            "$animux_anime_extractor" episodes --dub "$1"
+            "$animux_anime_extractor" episodes --lang "$extractor_lang" --dub "$1"
         else
-            "$animux_anime_extractor" episodes "$1"
+            "$animux_anime_extractor" episodes --lang "$extractor_lang" "$1"
         fi
         return
     fi
@@ -2057,6 +2125,7 @@ interactive_flow() {
 
                 id=$(printf "%s" "$selected_anime" | cut -f1)
                 title=$(printf "%s" "$selected_anime" | cut -f2 | sed 's/ - episode.*//')
+                route_provider_for_id "$id"
                 allanime_title="$(printf "%s" "$title" | cut -d'(' -f1 | tr -d '[:punct:]')"
 
                 status_msg "Fetching episodes..."
@@ -2139,17 +2208,12 @@ interactive_flow() {
 
                 id=$(printf "%s" "$selected_anime" | cut -f1)
                 title=$(printf "%s" "$selected_anime" | cut -f2)
+                route_provider_for_id "$id"
                 allanime_title="$(printf "%s" "$title" | cut -d'(' -f1 | tr -d '[:punct:]')"
-                case "$id" in
-                    jkanime:* | animeflv:* | animeav1:* | *jkanime.net* | *animeflv.* | *animeav1.com*)
-                        provider="python-extractor"
-                        sub_lang="es"
-                        ;;
-                    *)
-                        provider="allanime"
-                        sub_lang="en"
-                        ;;
-                esac
+                if ! is_python_extractor_id "$id"; then
+                    provider="allanime"
+                    sub_lang="en"
+                fi
                 provider="$(resolve_provider)" || die "Unsupported provider: $provider"
                 check_provider_deps
 
@@ -2227,6 +2291,7 @@ interactive_flow() {
                         title=$(printf "%s" "$selected_anime" | cut -f2)
                         allanime_title="$(printf "%s" "$title" | cut -d'(' -f1 | tr -d '[:punct:]')"
                         id=$(printf "%s" "$selected_anime" | cut -f1)
+                        route_provider_for_id "$id"
 
                         while :; do
                             status_msg "Fetching episodes..."

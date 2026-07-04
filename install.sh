@@ -85,6 +85,9 @@ for file in animux anime-extractor extractor.py menuPixelArt.txt asciiArt.txt an
         fail "Required file not found: $file"
 done
 
+[ -d "$source_dir/extractors" ] && [ -r "$source_dir/extractors/__init__.py" ] ||
+    fail "Required extractor package not found: extractors"
+
 bin_dir="$PREFIX/bin"
 libexec_dir="$PREFIX/libexec/animux"
 share_dir="$PREFIX/share/animux"
@@ -111,6 +114,11 @@ cp "$source_dir/anime-extractor" "$libexec_dir/anime-extractor" ||
 cp "$source_dir/extractor.py" "$libexec_dir/extractor.py" ||
     fail "Could not install extractor.py."
 
+rm -rf "$libexec_dir/extractors" ||
+    fail "Could not remove the previous extractor package."
+cp -R "$source_dir/extractors" "$libexec_dir/extractors" ||
+    fail "Could not install the extractor package."
+
 cp "$source_dir/menuPixelArt.txt" "$share_dir/menuPixelArt.txt" ||
     fail "Could not install menuPixelArt.txt."
 
@@ -122,6 +130,11 @@ chmod 755 "$bin_dir/animux" "$libexec_dir/anime-extractor" ||
 
 chmod 644 "$libexec_dir/extractor.py" "$share_dir/menuPixelArt.txt" "$share_dir/asciiArt.txt" ||
     fail "Could not set data file permissions."
+
+find "$libexec_dir/extractors" -type d -exec chmod 755 {} + ||
+    fail "Could not set extractor directory permissions."
+find "$libexec_dir/extractors" -type f -name '*.py' -exec chmod 644 {} + ||
+    fail "Could not set extractor module permissions."
 
 if [ -d "$source_dir/assets/ascii" ]; then
     say "Installing random ASCII art collection..."

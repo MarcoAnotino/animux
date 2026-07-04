@@ -12,6 +12,13 @@ Upstream base: pystardust/ani-cli
 - **Lanczos downscaling** in ffmpeg for sharper cover art at any size
 - **Dynamic terminal sizing** — cover art auto-scales using `stty size`
 - **JKanime support** — Spanish subtitles source added to main menu
+- **Provider fallback expansion** — Spanish subtitles now use JKanime →
+  AnimeFLV → AnimeFenix → TioAnime → AnimeAV1; Spanish dub uses MonosChinos →
+  AnimeFLV → AnimeAV1.
+- **English Python fallback** — AllAnime remains primary and falls back to
+  Gogoanime for empty searches and unresolved episodes.
+- **Language-aware extractor CLI** — `search`, `episodes`, and `episode` accept
+  `--lang en|es` while defaulting to Spanish for compatibility.
 - **Graphics cleanup** — cover images are cleared instantly on Esc or episode selection (no lingering)
 - **Custom start screen** — `menuPixelArt.txt` logo (box-drawing) + `asciiArt.txt` side panel
 - **Search text visibility fix** — migrated fzf colors to 256-color palette indexes; explicit `query:253`
@@ -22,6 +29,7 @@ Upstream base: pystardust/ani-cli
 - `ui_builtin_art` split into logo-only mode (for fzf header) and full mode (logo + braille art)
 - `ui_main_header` now uses logo-only to keep fzf header compact and menu items visible
 - `ui_scale_braille_art` regex now accepts any variable name before `"""` (not just `logo`)
+- The installer now deploys and permissions the complete `extractors/` package.
 
 ### Attribution
 

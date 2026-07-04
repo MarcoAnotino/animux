@@ -54,7 +54,7 @@ Animux is a customized and extended project originally based on [pystardust/ani-
 * Random bundled ASCII art in the main menu
 * macOS and Linux support
 * POSIX shell entrypoint
-* Python-backed internal extractor for Spanish sources
+* Python-backed internal extractor for Spanish and English fallback sources
 * Installer and uninstaller scripts
 
 ---
@@ -65,10 +65,11 @@ Animux automatically chooses the best internal source based on the selected mode
 
 ### English subtitles
 
-English subtitle mode uses the English provider flow.
+English mode keeps AllAnime as the primary provider. If search returns no
+results, or an episode has no usable stream, Animux retries through Gogoanime.
 
 ```text
-English subtitles → AllAnime
+English subtitles/dub → AllAnime → Gogoanime
 ```
 
 ### Spanish subtitles
@@ -76,15 +77,15 @@ English subtitles → AllAnime
 Spanish subtitle search uses sequential fallback. Animux stops at the first source that returns results.
 
 ```text
-Spanish subtitles → JKanime → AnimeFLV → AnimeAV1
+Spanish subtitles → JKanime → AnimeFLV → AnimeFenix → TioAnime → AnimeAV1
 ```
 
-### Dub mode
+### Spanish dub mode
 
 Dub search prioritizes sources more likely to expose dubbed entries first.
 
 ```text
-Dub mode → AnimeFLV → AnimeAV1 → JKanime
+Spanish dub → MonosChinos → AnimeFLV → AnimeAV1
 ```
 
 This avoids duplicate search entries and keeps the result list focused.
@@ -307,6 +308,15 @@ animux -P allanime -L en "frieren"
 animux -P python-extractor -L es "one piece"
 ```
 
+The standalone helper also accepts an explicit language. Omitting `--lang`
+remains equivalent to `--lang es`.
+
+```sh
+./anime-extractor search --lang es "frieren"
+./anime-extractor search --lang es --dub "dragon ball"
+./anime-extractor search --lang en "solo leveling"
+```
+
 Legacy provider aliases are kept for compatibility where possible.
 
 ---
@@ -389,6 +399,7 @@ On first use, Animux can copy an existing `ani-cli/ani-hsts` history file when t
 $PREFIX/bin/animux
 $PREFIX/libexec/animux/anime-extractor
 $PREFIX/libexec/animux/extractor.py
+$PREFIX/libexec/animux/extractors/*.py
 $PREFIX/share/animux/menuPixelArt.txt
 $PREFIX/share/animux/asciiArt.txt
 $PREFIX/share/animux/ascii/*.txt
