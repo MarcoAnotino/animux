@@ -51,6 +51,7 @@ Animux is a customized and extended project originally based on [pystardust/ani-
 * Keyboard-first navigation
 * Back navigation with `Esc`
 * Continue watching / history support
+* Personal anime library with progress, favorites, completed, and dropped states
 * Cached search and episode metadata for faster repeated browsing
 * HD cover previews in episode menus
 * Random bundled ASCII art in the main menu
@@ -301,6 +302,23 @@ Tab      Multi-select
 
 ---
 
+## Personal anime library
+
+Open `LIBRARY  My anime list` from the main menu to:
+
+* save shows for later
+* track watched episodes and resume progress
+* mark anime as completed or dropped
+* keep favorites independently of watch status
+* browse Watching, Watch later, Completed, Favorites, Dropped, or All anime
+* see the selected anime cover and metadata in the library preview
+
+Selecting a search result opens quick actions before the episode list. Commands
+that already specify a result or episode with `-S`/`-e` continue directly, and
+successful playback or downloads still update library progress.
+
+---
+
 ## Provider override
 
 Most users do not need this. Animux chooses a source automatically based on the selected language/mode.
@@ -337,6 +355,8 @@ ANIMUX_DOWNLOAD_DIR
 ANIMUX_QUALITY
 ANIMUX_LOG
 ANIMUX_HIST_DIR
+ANIMUX_LIBRARY_FILE
+ANIMUX_LIBRARY_ART
 ANIMUX_LIBEXEC_DIR
 ANIMUX_SHARE_DIR
 ANIMUX_BUILTIN_ART
@@ -383,6 +403,16 @@ History is stored at:
 ${XDG_STATE_HOME:-$HOME/.local/state}/animux/ani-hsts
 ```
 
+The personal library is stored separately at:
+
+```text
+${XDG_STATE_HOME:-$HOME/.local/state}/animux/library.json
+```
+
+Writes use an atomic temporary-file replacement. Invalid JSON is reported and
+left untouched. `ani-hsts` remains the source for the existing history and
+Continue watching flows.
+
 Cached search metadata, episode lists, and art are stored under:
 
 ```text
@@ -400,6 +430,7 @@ On first use, Animux can copy an existing `ani-cli/ani-hsts` history file when t
 ```text
 $PREFIX/bin/animux
 $PREFIX/libexec/animux/anime-extractor
+$PREFIX/libexec/animux/animux-library
 $PREFIX/libexec/animux/extractor.py
 $PREFIX/libexec/animux/extractors/*.py
 $PREFIX/share/animux/menuPixelArt.txt
@@ -448,6 +479,12 @@ Disable episode cover previews:
 
 ```sh
 ANIMUX_EPISODE_ART=0 animux
+```
+
+Disable only library cover previews:
+
+```sh
+ANIMUX_LIBRARY_ART=0 animux
 ```
 
 ---
@@ -499,7 +536,7 @@ curl -fsSL https://raw.githubusercontent.com/MarcoAnotino/animux/main/uninstall.
 
 Use the same `PREFIX` supplied during installation if you installed to a custom prefix.
 
-Cache and history are intentionally preserved.
+Cache, history, and the personal library are intentionally preserved.
 
 ---
 

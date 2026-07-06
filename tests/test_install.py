@@ -15,6 +15,11 @@ class TestInstaller(unittest.TestCase):
         )
         self.assertIn("-type f -name '*.py' -exec chmod 644", source)
 
+    def test_installs_library_helper(self):
+        source = (ROOT / "install.sh").read_text(encoding="utf-8")
+        self.assertIn('cp "$source_dir/animux-library" "$libexec_dir/animux-library"', source)
+        self.assertIn('"$libexec_dir/animux-library"', source)
+
 
 if __name__ == "__main__":
     unittest.main()

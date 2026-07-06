@@ -80,7 +80,7 @@ else
         fail "Could not locate animux source after extraction."
 fi
 
-for file in animux anime-extractor extractor.py menuPixelArt.txt asciiArt.txt animux.1; do
+for file in animux anime-extractor animux-library extractor.py menuPixelArt.txt asciiArt.txt animux.1; do
     [ -f "$source_dir/$file" ] && [ -r "$source_dir/$file" ] ||
         fail "Required file not found: $file"
 done
@@ -111,6 +111,9 @@ cp "$source_dir/animux" "$bin_dir/animux" ||
 cp "$source_dir/anime-extractor" "$libexec_dir/anime-extractor" ||
     fail "Could not install anime-extractor."
 
+cp "$source_dir/animux-library" "$libexec_dir/animux-library" ||
+    fail "Could not install animux-library."
+
 cp "$source_dir/extractor.py" "$libexec_dir/extractor.py" ||
     fail "Could not install extractor.py."
 
@@ -125,7 +128,7 @@ cp "$source_dir/menuPixelArt.txt" "$share_dir/menuPixelArt.txt" ||
 cp "$source_dir/asciiArt.txt" "$share_dir/asciiArt.txt" ||
     fail "Could not install asciiArt.txt."
 
-chmod 755 "$bin_dir/animux" "$libexec_dir/anime-extractor" ||
+chmod 755 "$bin_dir/animux" "$libexec_dir/anime-extractor" "$libexec_dir/animux-library" ||
     fail "Could not set executable permissions."
 
 chmod 644 "$libexec_dir/extractor.py" "$share_dir/menuPixelArt.txt" "$share_dir/asciiArt.txt" ||

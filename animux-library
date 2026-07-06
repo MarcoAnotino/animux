@@ -1,0 +1,378 @@
+#!/usr/bin/env python3
+"""Atomic JSON storage helper for the animux personal library."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+
+STATUSES = ("watching", "watch_later", "completed", "dropped")
+STATUS_LABELS = {
+    "watching": "Watching",
+    "watch_later": "Watch later",
+    "completed": "Completed",
+    "dropped": "Dropped",
+}
+
+
+class LibraryError(Exception):
+    pass
+
+
+def default_path() -> Path:
+    root = os.environ.get("XDG_STATE_HOME")
+    if root:
+        return Path(root) / "animux" / "library.json"
+    return Path.home() / ".local" / "state" / "animux" / "library.json"
+
+
+def now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def clean_text(value: Any) -> str:
+    return str(value or "").replace("\t", " ").replace("\r", " ").replace("\n", " ").strip()
+
+
+def episode_key(value: str) -> tuple[int, float | str]:
+    try:
+        return (0, float(value))
+    except (TypeError, ValueError):
+        return (1, value.casefold())
+
+
+def normalize_total(value: Any) -> int | float | str | None:
+    if value in (None, "", "?"):
+        return None
+    text = clean_text(value)
+    try:
+        number = float(text)
+    except ValueError:
+        return text
+    return int(number) if number.is_integer() else number
+
+
+def totals_match(episode: str, total: Any) -> bool:
+    if total is None:
+        return False
+    try:
+        return float(episode) == float(total)
+    except (TypeError, ValueError):
+        return episode == str(total)
+
+
+def load_library(path: Path) -> dict[str, dict[str, Any]]:
+    if not path.exists():
+        return {}
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except json.JSONDecodeError as exc:
+        raise LibraryError(
+            f"invalid JSON in {path}: line {exc.lineno}, column {exc.colno}. "
+            "Data was not changed."
+        ) from exc
+    except OSError as exc:
+        raise LibraryError(f"cannot read {path}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise LibraryError(f"invalid library root in {path}: expected a JSON object. Data was not changed.")
+    for anime_id, entry in data.items():
+        if not isinstance(anime_id, str) or not isinstance(entry, dict):
+            raise LibraryError(f"invalid library entry in {path}. Data was not changed.")
+    return data
+
+
+def atomic_write(path: Path, data: dict[str, dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_name = ""
+    try:
+        fd, temp_name = tempfile.mkstemp(prefix=".library.", suffix=".tmp", dir=path.parent)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, ensure_ascii=False, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temp_name, 0o600)
+        os.replace(temp_name, path)
+        temp_name = ""
+        try:
+            directory_fd = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        except OSError:
+            pass
+    except OSError as exc:
+        raise LibraryError(f"cannot write {path}: {exc}") from exc
+    finally:
+        if temp_name:
+            try:
+                os.unlink(temp_name)
+            except OSError:
+                pass
+
+
+def new_entry(args: argparse.Namespace, timestamp: str) -> dict[str, Any]:
+    return {
+        "id": clean_text(args.id),
+        "title": clean_text(getattr(args, "title", "")) or clean_text(args.id),
+        "status": getattr(args, "status", None) or "watching",
+        "language": clean_text(getattr(args, "language", "")) or "en",
+        "mode": clean_text(getattr(args, "mode", "")) or "sub",
+        "provider": clean_text(getattr(args, "provider", "")) or "auto",
+        "watched_episodes": [],
+        "last_episode": None,
+        "total_episodes": normalize_total(getattr(args, "total", None)),
+        "favorite": False,
+        "added_at": timestamp,
+        "updated_at": timestamp,
+        "completed_at": timestamp if getattr(args, "status", None) == "completed" else None,
+    }
+
+
+def update_metadata(entry: dict[str, Any], args: argparse.Namespace) -> None:
+    for attr, key in (("title", "title"), ("language", "language"), ("mode", "mode"), ("provider", "provider")):
+        value = clean_text(getattr(args, attr, ""))
+        if value:
+            entry[key] = value
+    total = normalize_total(getattr(args, "total", None))
+    if total is not None:
+        entry["total_episodes"] = total
+
+
+def require_entry(data: dict[str, dict[str, Any]], anime_id: str) -> dict[str, Any]:
+    try:
+        return data[anime_id]
+    except KeyError as exc:
+        raise LibraryError(f"anime is not in the library: {anime_id}") from exc
+
+
+def set_status(entry: dict[str, Any], status: str, timestamp: str) -> None:
+    entry["status"] = status
+    entry["updated_at"] = timestamp
+    entry["completed_at"] = timestamp if status == "completed" else None
+
+
+def command_init(args: argparse.Namespace, path: Path) -> None:
+    if not path.exists():
+        atomic_write(path, {})
+    else:
+        load_library(path)
+
+
+def command_upsert(args: argparse.Namespace, path: Path) -> None:
+    data = load_library(path)
+    timestamp = now()
+    entry = data.get(args.id)
+    if entry is None:
+        entry = new_entry(args, timestamp)
+        data[args.id] = entry
+    else:
+        update_metadata(entry, args)
+        if args.status:
+            set_status(entry, args.status, timestamp)
+        else:
+            entry["updated_at"] = timestamp
+    atomic_write(path, data)
+
+
+def command_status(args: argparse.Namespace, path: Path) -> None:
+    data = load_library(path)
+    entry = require_entry(data, args.id)
+    set_status(entry, args.status, now())
+    atomic_write(path, data)
+
+
+def command_favorite(args: argparse.Namespace, path: Path) -> None:
+    data = load_library(path)
+    entry = require_entry(data, args.id)
+    if args.value == "toggle":
+        entry["favorite"] = not bool(entry.get("favorite", False))
+    else:
+        entry["favorite"] = args.value == "true"
+    entry["updated_at"] = now()
+    atomic_write(path, data)
+
+
+def command_remove(args: argparse.Namespace, path: Path) -> None:
+    data = load_library(path)
+    if args.id in data:
+        del data[args.id]
+        atomic_write(path, data)
+
+
+def command_watch(args: argparse.Namespace, path: Path) -> None:
+    data = load_library(path)
+    timestamp = now()
+    entry = data.get(args.id)
+    if entry is None:
+        entry = new_entry(args, timestamp)
+        data[args.id] = entry
+    update_metadata(entry, args)
+    episode = clean_text(args.episode)
+    watched = [clean_text(item) for item in entry.get("watched_episodes", []) if clean_text(item)]
+    if episode not in watched:
+        watched.append(episode)
+    entry["watched_episodes"] = sorted(watched, key=episode_key)
+    entry["last_episode"] = episode
+    if entry.get("status") in (None, "watch_later", "dropped"):
+        entry["status"] = "watching"
+        entry["completed_at"] = None
+    if totals_match(episode, entry.get("total_episodes")):
+        entry["status"] = "completed"
+        entry["completed_at"] = timestamp
+    entry["updated_at"] = timestamp
+    atomic_write(path, data)
+
+
+def matches_filter(entry: dict[str, Any], view: str) -> bool:
+    if view == "favorites":
+        return bool(entry.get("favorite", False))
+    if view == "all":
+        return True
+    return entry.get("status") == view
+
+
+def sorted_entries(data: dict[str, dict[str, Any]], view: str) -> list[dict[str, Any]]:
+    entries = [entry for entry in data.values() if matches_filter(entry, view)]
+    if view == "watching":
+        return sorted(entries, key=lambda item: item.get("updated_at") or "", reverse=True)
+    if view == "watch_later":
+        return sorted(entries, key=lambda item: item.get("added_at") or "", reverse=True)
+    return sorted(entries, key=lambda item: clean_text(item.get("title")).casefold())
+
+
+def progress(entry: dict[str, Any]) -> str:
+    watched = len(set(str(item) for item in entry.get("watched_episodes", [])))
+    total = entry.get("total_episodes")
+    return f"{watched}/{total if total is not None else '?'}"
+
+
+def tsv_row(entry: dict[str, Any]) -> str:
+    status = clean_text(entry.get("status")) or "watching"
+    label = STATUS_LABELS.get(status, status.replace("_", " ").title())
+    title = clean_text(entry.get("title"))
+    marker = " *" if entry.get("favorite") else ""
+    display = f"[{label}] {title}{marker}"
+    display = f"{display[:65]:<65} {progress(entry):>10}"
+    values = [
+        display,
+        clean_text(entry.get("id")),
+        title,
+        status,
+        clean_text(entry.get("language")),
+        clean_text(entry.get("mode")),
+        clean_text(entry.get("provider")),
+        clean_text(entry.get("last_episode")),
+        clean_text(entry.get("total_episodes")),
+        "true" if entry.get("favorite") else "false",
+    ]
+    return "\t".join(values)
+
+
+def command_list(args: argparse.Namespace, path: Path) -> None:
+    data = load_library(path)
+    for entry in sorted_entries(data, args.view):
+        print(tsv_row(entry))
+
+
+def preview(entry: dict[str, Any]) -> str:
+    status = STATUS_LABELS.get(str(entry.get("status")), clean_text(entry.get("status")).title())
+    total = entry.get("total_episodes")
+    lines = [
+        f"Title: {clean_text(entry.get('title'))}",
+        f"Status: {status}",
+        f"Progress: {progress(entry)}",
+        f"Language: {clean_text(entry.get('language')) or '?'}",
+        f"Mode: {clean_text(entry.get('mode')) or '?'}",
+        f"Last watched episode: {clean_text(entry.get('last_episode')) or '-'}",
+        f"Total episodes: {total if total is not None else '?'}",
+        f"Favorite: {'yes' if entry.get('favorite') else 'no'}",
+    ]
+    return "\n".join(lines)
+
+
+def command_show(args: argparse.Namespace, path: Path) -> None:
+    entry = require_entry(load_library(path), args.id)
+    if args.field:
+        value = entry.get(args.field)
+        if isinstance(value, bool):
+            print("true" if value else "false")
+        elif value is not None:
+            print(clean_text(value))
+    elif args.format == "tsv":
+        print(tsv_row(entry))
+    else:
+        print(preview(entry))
+
+
+def add_metadata(parser: argparse.ArgumentParser, *, status: bool = False) -> None:
+    parser.add_argument("--id", required=True)
+    parser.add_argument("--title")
+    parser.add_argument("--language")
+    parser.add_argument("--mode")
+    parser.add_argument("--provider")
+    parser.add_argument("--total")
+    if status:
+        parser.add_argument("--status", choices=STATUSES)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="animux-library")
+    parser.add_argument("--file", type=Path, default=default_path())
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    subparsers.add_parser("init")
+    upsert = subparsers.add_parser("upsert")
+    add_metadata(upsert, status=True)
+    status = subparsers.add_parser("status")
+    status.add_argument("--id", required=True)
+    status.add_argument("--status", required=True, choices=STATUSES)
+    favorite = subparsers.add_parser("favorite")
+    favorite.add_argument("--id", required=True)
+    favorite.add_argument("--value", choices=("true", "false", "toggle"), default="toggle")
+    remove = subparsers.add_parser("remove")
+    remove.add_argument("--id", required=True)
+    watch = subparsers.add_parser("watch")
+    add_metadata(watch)
+    watch.add_argument("--episode", required=True)
+    listing = subparsers.add_parser("list")
+    listing.add_argument("--view", choices=(*STATUSES, "favorites", "all"), default="all")
+    show = subparsers.add_parser("show")
+    show.add_argument("--id", required=True)
+    show.add_argument("--format", choices=("preview", "tsv"), default="preview")
+    show.add_argument("--field")
+    return parser
+
+
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
+    commands = {
+        "init": command_init,
+        "upsert": command_upsert,
+        "status": command_status,
+        "favorite": command_favorite,
+        "remove": command_remove,
+        "watch": command_watch,
+        "list": command_list,
+        "show": command_show,
+    }
+    try:
+        commands[args.command](args, args.file)
+    except LibraryError as exc:
+        print(f"animux library: {exc}", file=sys.stderr)
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

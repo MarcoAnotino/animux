@@ -1,4 +1,4 @@
-.TH ANIMUX 1 "July 3, 2026" "animux 4.14.1" "User Commands"
+.TH ANIMUX 1 "July 5, 2026" "animux 4.15.0" "User Commands"
 .SH NAME
 animux \- browse and watch anime from your terminal
 .SH SYNOPSIS
@@ -17,6 +17,11 @@ Spanish subtitles: JKanime, AnimeFLV, AnimeFenix, TioAnime, AnimeAV1.
 Spanish dub: MonosChinos, AnimeFLV, AnimeAV1.
 .IP \(bu 2
 English: AllAnime first, then Gogoanime when search or episode resolution fails.
+.PP
+The interactive main menu includes a personal anime library. It can save shows
+for later, track watched episodes, mark completed or dropped shows, keep
+favorites, and preview cover art. The existing ani-hsts history and Continue
+watching flow remain available independently.
 .SH OPTIONS
 .TP
 .BR \-c ", " \-\-continue
@@ -106,6 +111,16 @@ Watch-history directory. The default is
 or
 .IR $HOME/.local/state/animux .
 .TP
+.B ANIMUX_LIBRARY_FILE
+Personal-library JSON file. The default is
+.IR $XDG_STATE_HOME/animux/library.json ,
+or
+.IR $HOME/.local/state/animux/library.json .
+.TP
+.B ANIMUX_LIBRARY_ART
+Set to 0 to disable cover art in library views. ANIMUX_EPISODE_ART=0 also
+disables library art.
+.TP
 .B ANIMUX_LIBEXEC_DIR
 Directory containing anime-extractor, extractor.py, and the extractors Python
 package.
@@ -135,6 +150,10 @@ Set to 0 to hide the command header.
 .TP
 .I $XDG_STATE_HOME/animux/ani-hsts
 Watch history.
+.TP
+.I $XDG_STATE_HOME/animux/library.json
+Personal anime library. This file is separate from ani-hsts and is replaced
+atomically after successful updates.
 .TP
 .I $XDG_CACHE_HOME/animux
 Cached art and metadata; when XDG_CACHE_HOME is unset, the location is

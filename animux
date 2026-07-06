@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version_number="4.14.1"
+version_number="4.15.0"
 
 # ANIMUX_* is the public configuration namespace. Legacy ANI_CLI_* variables
 # remain supported so existing upstream configurations continue to work.
@@ -9,7 +9,7 @@ for animux_env_name in \
     DOWNLOAD_DIR EPISODE_ART EPISODE_ART_SIZE EPISODE_MENU_HEIGHT \
     EPISODE_PREVIEW_WINDOW EXIT_AFTER_PLAY EXTERNAL_MENU \
     EXTERNAL_MENU_NORMAL_WINDOW FZF_BORDER FZF_COLORS FZF_HEIGHT HEADER \
-    HIST_DIR JKANIME_CONNECT_TIMEOUT JKANIME_MAX_TIME LANG LOG \
+    HIST_DIR JKANIME_CONNECT_TIMEOUT JKANIME_MAX_TIME LANG LIBRARY_ART LIBRARY_FILE LOG \
     MAIN_MENU_HEIGHT MODE MULTI_SELECTION NO_DETACH NO_HEADER PLAYER PROVIDER \
     QUALITY RANDOM_ASCII_ART REMOTE_ART SEARCH_MENU_HEIGHT SKIP_INTRO SKIP_TITLE UI_MESSAGES
 do
@@ -742,6 +742,72 @@ ui_cleanup_episode_preview() {
     (sleep 0.05 && [ -t 2 ] && [ -w /dev/tty ] && printf '\033_Ga=d;\033\\' >/dev/tty 2>/dev/null) &
 }
 
+library_helper_run() {
+    [ -n "${animux_library_helper:-}" ] && [ -x "$animux_library_helper" ] || {
+        status_msg "Personal library helper not found. Reinstall animux."
+        return 1
+    }
+    "$animux_library_helper" --file "$library_file" "$@"
+}
+
+library_total_from_episodes() {
+    _animux_library_total="$(printf '%s\n' "$1" | tail -n 1)"
+    case "$_animux_library_total" in
+        '' | *[!0-9.]*) return 1 ;;
+        *) printf '%s\n' "$_animux_library_total" ;;
+    esac
+}
+
+library_title_total() {
+    printf '%s\n' "$1" | sed -nE 's/.*\(([0-9]+) episodes\).*/\1/p'
+}
+
+library_upsert_status() {
+    _animux_library_status="$1"
+    _animux_library_total="${2:-$(library_title_total "$title")}"
+    set -- upsert --id "$id" --title "$(clean_display_title "$title")" \
+        --status "$_animux_library_status" --language "$sub_lang" --mode "$mode" \
+        --provider "$provider"
+    [ -n "$_animux_library_total" ] && set -- "$@" --total "$_animux_library_total"
+    library_helper_run "$@"
+}
+
+library_record_progress() {
+    _animux_library_total="$(library_total_from_episodes "$ep_list" 2>/dev/null || true)"
+    set -- watch --id "$id" --title "$(clean_display_title "$title")" \
+        --episode "$ep_no" --language "$sub_lang" --mode "$mode" --provider "$provider"
+    [ -n "$_animux_library_total" ] && set -- "$@" --total "$_animux_library_total"
+    library_helper_run "$@" || status_msg "Library progress was not updated."
+}
+
+library_preview_render() {
+    _animux_library_preview_id="$1"
+    _animux_library_preview_title="$(library_helper_run show --id "$_animux_library_preview_id" --field title 2>/dev/null)"
+    [ -n "$_animux_library_preview_title" ] || return 1
+
+    if [ "${ANIMUX_LIBRARY_ART:-${ANI_CLI_LIBRARY_ART:-${ANI_CLI_EPISODE_ART:-1}}}" != "0" ]; then
+        _animux_library_cover="$(ui_fetch_cover_file "$_animux_library_preview_title" 2>/dev/null || true)"
+        if [ -n "$_animux_library_cover" ]; then
+            if command -v chafa >/dev/null 2>&1; then
+                chafa --format=auto --size="${FZF_PREVIEW_COLUMNS:-40}x${FZF_PREVIEW_LINES:-20}" \
+                    --scale=max "$_animux_library_cover" 2>/dev/null || true
+            elif [ -n "${WEZTERM_PANE:-}" ] && command -v wezterm >/dev/null 2>&1; then
+                wezterm imgcat "$_animux_library_cover" 2>/dev/null || true
+            elif [ -n "${KITTY_WINDOW_ID:-}" ] && command -v kitty >/dev/null 2>&1; then
+                kitty +kitten icat --silent --stdin=no --transfer-mode=file \
+                    --place="${FZF_PREVIEW_COLUMNS:-40}x${FZF_PREVIEW_LINES:-20}@0x0" \
+                    "$_animux_library_cover" 2>/dev/null || true
+            elif [ "${TERM_PROGRAM:-}" = "iTerm.app" ] && command -v imgcat >/dev/null 2>&1; then
+                imgcat "$_animux_library_cover" 2>/dev/null || true
+            else
+                ui_render_cover "$_animux_library_cover" 2>/dev/null || true
+            fi
+            printf '\n'
+        fi
+    fi
+    library_helper_run show --id "$_animux_library_preview_id" 2>/dev/null
+}
+
 ui_rule() {
     printf "%s%s%s\n" "$ui_muted" '────────────────────────────────────────────────────────' "$ui_reset"
 }
@@ -865,7 +931,8 @@ WATCH       Spanish subtitles
 WATCH       Dubbed Spanish
 WATCH       Dubbed English
 RESUME      Continue watching
-LIBRARY     Search history
+LIBRARY     My anime list
+HISTORY     Search history
 EXIT        Close animux"
 
     if [ "$use_external_menu" = "0" ]; then
@@ -888,7 +955,7 @@ EXIT        Close animux"
         [ "$_mm_left_w" -lt 10 ] && _mm_left_w=10
         _mm_header_raw="$(ui_main_header)"
         _mm_header_lines="$(printf '%s\n' "$_mm_header_raw" | wc -l | tr -d '[:space:]')"
-        _mm_content_h=$(( _mm_header_lines + 8 ))
+        _mm_content_h=$(( _mm_header_lines + 9 ))
         _mm_top_pad=$(( (_mm_panel_h - _mm_content_h) / 2 ))
         [ "$_mm_top_pad" -lt 0 ] && _mm_top_pad=0
         launcher_header="$(ui_center_text_block \
@@ -965,7 +1032,10 @@ EXIT        Close animux"
         *Continue*)
             search="history"
             ;;
-        *LIBRARY*)
+        *"My anime list"*)
+            search="library"
+            ;;
+        *"Search history"*)
             search="search_history"
             ;;
         *)
@@ -1089,6 +1159,102 @@ interactive_select_episode() {
     fi
     printf "%s\n" "$select_ep"
     return 0
+}
+
+interactive_anime_actions() {
+    _animux_library_favorite="$(library_helper_run show --id "$id" --field favorite 2>/dev/null || true)"
+    _animux_library_current_status="$(library_helper_run show --id "$id" --field status 2>/dev/null || true)"
+    if [ "$_animux_library_favorite" = "true" ]; then
+        _animux_library_favorite_action="Remove from Favorites"
+    else
+        _animux_library_favorite_action="Add to Favorites"
+    fi
+    launcher_header="$(ui_compact_header "$(clean_display_title "$title")" "choose an action   esc back")"
+    _animux_library_action="$(printf '%s\n' \
+        "Play episodes" \
+        "Add to Watch later" \
+        "Mark as Watching" \
+        "Mark as Completed" \
+        "Mark as Dropped" \
+        "$_animux_library_favorite_action" \
+        "Remove from Library" \
+        "Back" | launcher "" "  anime action  ")"
+    _animux_library_action_rc=$?
+    unset launcher_header
+    if [ "$_animux_library_action_rc" -eq 130 ] || [ -z "$_animux_library_action" ]; then
+        printf '%s\n' back
+        return 0
+    fi
+    case "$_animux_library_action" in
+        "Play episodes") printf '%s\n' play ;;
+        "Add to Watch later") library_upsert_status watch_later && status_msg "Saved to Watch later"; printf '%s\n' stay ;;
+        "Mark as Watching") library_upsert_status watching && status_msg "Marked as Watching"; printf '%s\n' stay ;;
+        "Mark as Completed") library_upsert_status completed && status_msg "Marked as Completed"; printf '%s\n' stay ;;
+        "Mark as Dropped") library_upsert_status dropped && status_msg "Marked as Dropped"; printf '%s\n' stay ;;
+        "Add to Favorites")
+            [ -n "$_animux_library_current_status" ] || library_upsert_status watching
+            library_helper_run favorite --id "$id" --value true && status_msg "Added to Favorites"
+            printf '%s\n' stay
+            ;;
+        "Remove from Favorites") library_helper_run favorite --id "$id" --value false && status_msg "Removed from Favorites"; printf '%s\n' stay ;;
+        "Remove from Library") library_helper_run remove --id "$id" && status_msg "Removed from Library"; printf '%s\n' removed ;;
+        *) printf '%s\n' back ;;
+    esac
+}
+
+offer_anime_actions() {
+    [ -z "${ep_no:-}" ] && [ -z "${index:-}" ] && [ -t 0 ] && [ -t 1 ]
+}
+
+library_choose_view() {
+    launcher_header="$(ui_compact_header "personal anime library" "enter open   esc back")"
+    _animux_library_view="$(printf '%s\n' \
+        "Continue watching" "Watch later" "Completed" "Favorites" "Dropped" "All anime" "Back" |
+        launcher "" "  library  ")"
+    _animux_library_view_rc=$?
+    unset launcher_header
+    if [ "$_animux_library_view_rc" -eq 130 ] || [ -z "$_animux_library_view" ]; then
+        printf '%s\n' back
+        return
+    fi
+    case "$_animux_library_view" in
+        "Continue watching") printf '%s\n' watching ;;
+        "Watch later") printf '%s\n' watch_later ;;
+        Completed) printf '%s\n' completed ;;
+        Favorites) printf '%s\n' favorites ;;
+        Dropped) printf '%s\n' dropped ;;
+        "All anime") printf '%s\n' all ;;
+        *) printf '%s\n' back ;;
+    esac
+}
+
+interactive_select_library_entry() {
+    _animux_library_rows="$1"
+    if [ "$use_external_menu" = "0" ]; then
+        launcher_header="$(ui_compact_header "personal anime library" "enter actions   esc back   * favorite")"
+        launcher_height="${ANI_CLI_EPISODE_MENU_HEIGHT:-95%}"
+        export ANIMUX_SELF="$animux_self"
+        export ANIMUX_INTERNAL_LIBRARY_FILE="$library_file"
+        _animux_library_selected="$(printf '%s\n' "$_animux_library_rows" |
+            FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS:-}${ui_fzf_colors:+ --color=$ui_fzf_colors}" \
+            fzf --ansi --reverse --cycle --height="$launcher_height" \
+                --border="${ANI_CLI_FZF_BORDER:-rounded}" --pointer=">" --info=inline \
+                --prompt="  choose anime  " --header="$launcher_header" \
+                --delimiter="$(printf '\t')" --with-nth=1 \
+                --preview='ANIMUX_INTERNAL_LIBRARY_PREVIEW_ID={2} ANIMUX_LIBRARY_FILE="$ANIMUX_INTERNAL_LIBRARY_FILE" "$ANIMUX_SELF"' \
+                --preview-window="${ANI_CLI_EPISODE_PREVIEW_WINDOW:-right,50%,border-left}")"
+        _animux_library_rc=$?
+        unset launcher_header launcher_height ANIMUX_SELF ANIMUX_INTERNAL_LIBRARY_FILE
+        ui_cleanup_episode_preview
+    else
+        launcher_header="Personal anime library · Enter: actions · Esc: back"
+        _animux_library_display="$(printf '%s\n' "$_animux_library_rows" | cut -f1 | launcher "" "  choose anime  ")"
+        _animux_library_rc=$?
+        unset launcher_header
+        _animux_library_selected="$(printf '%s\n' "$_animux_library_rows" | awk -F '\t' -v wanted="$_animux_library_display" '$1 == wanted { print; exit }')"
+    fi
+    [ "$_animux_library_rc" -eq 0 ] && [ -n "$_animux_library_selected" ] || return 130
+    printf '%s\n' "$_animux_library_selected"
 }
 
 die() {
@@ -1712,6 +1878,7 @@ play_episode() {
         get_episode_url
     fi
     [ "$player_function" != "debug" ] && status_msg "Opening in $(player_label)..."
+    playback_succeeded=1
     # shellcheck disable=SC2086
     case "$player_function" in
         debug)
@@ -1741,7 +1908,7 @@ play_episode() {
         flatpak_mpv) flatpak run io.mpv.Mpv --tls-verify=no --force-media-title="${allanime_title}Episode ${ep_no}" "$episode" $refr_flag >/dev/null 2>&1 & ;;
         vlc*) nohup $player_function --http-referrer="${refr_flag#--referrer=}" --play-and-exit --meta-title="${allanime_title}Episode ${ep_no}" "$episode" >/dev/null 2>&1 & ;;
         *yncpla*) nohup $player_function "$episode" -- --tls-verify=no --force-media-title="${allanime_title}Episode ${ep_no}" $refr_flag >/dev/null 2>&1 & ;;
-        download) "$player_function" "$episode" "${allanime_title}Episode ${ep_no}" ;;
+        download) "$player_function" "$episode" "${allanime_title}Episode ${ep_no}" || playback_succeeded=0 ;;
         catt) nohup catt cast "$episode" >/dev/null 2>&1 & ;;
         iSH)
             printf "\e]8;;vlc://%s\a~~~~~~~~~~~~~~~~~~~~\n~ Tap to open VLC ~\n~~~~~~~~~~~~~~~~~~~~\e]8;;\a\n" "$episode"
@@ -1752,6 +1919,7 @@ play_episode() {
     replay="$episode"
     unset episode
     update_history
+    [ "$playback_succeeded" = "1" ] && library_record_progress
     [ "$use_external_menu" = "1" ] && wait
     [ "$use_external_menu" = "2" ] && wait
 }
@@ -1870,6 +2038,15 @@ animux_anime_extractor="$(find_runtime_file anime-extractor \
     "/usr/local/libexec/animux" \
     "/opt/homebrew/libexec/animux" \
     "$HOME/.local/libexec/animux" 2>/dev/null || true)"
+animux_library_helper="$(find_runtime_file animux-library \
+    "${ANIMUX_LIBEXEC_DIR:-}" \
+    "$script_dir" \
+    "${PREFIX:+$PREFIX/libexec/animux}" \
+    "$animux_runtime_prefix/libexec/animux" \
+    "/usr/local/libexec/animux" \
+    "/opt/homebrew/libexec/animux" \
+    "$HOME/.local/libexec/animux" 2>/dev/null || true)"
+animux_self="$script_dir/${0##*/}"
 animux_builtin_art="$(find_art_file menuPixelArt.txt \
     "${ANIMUX_BUILTIN_ART:-}" "${ANI_CLI_BUILTIN_ART:-}" 2>/dev/null || true)"
 animux_ascii_art_dir="$(find_runtime_dir \
@@ -1938,6 +2115,15 @@ histfile="$hist_dir/ani-hsts"
 [ ! -f "$histfile" ] && [ -f "$animux_state_root/ani-cli/ani-hsts" ] &&
     cp "$animux_state_root/ani-cli/ani-hsts" "$histfile" 2>/dev/null
 [ ! -f "$histfile" ] && : >"$histfile"
+library_file="${ANIMUX_LIBRARY_FILE:-$animux_state_root/animux/library.json}"
+
+# fzf invokes a short-lived animux process for the currently highlighted
+# library entry. It reuses the normal cover cache and renderer, then exits
+# before argument parsing, dependency checks, or playback flow.
+if [ -n "${ANIMUX_INTERNAL_LIBRARY_PREVIEW_ID:-}" ]; then
+    library_preview_render "$ANIMUX_INTERNAL_LIBRARY_PREVIEW_ID"
+    exit $?
+fi
 search="${ANIMUX_DEFAULT_SOURCE:-${ANI_CLI_DEFAULT_SOURCE:-scrape}}"
 branch="${ANIMUX_BRANCH:-${ANI_CLI_BRANCH:-main}}"
 
@@ -2073,6 +2259,74 @@ check_provider_deps() {
     [ "$provider" = "python-extractor" ] && dep_ch "python3"
 }
 
+library_flow() {
+    library_helper_run init || return 1
+    while :; do
+        _animux_library_view="$(library_choose_view)"
+        [ "$_animux_library_view" != "back" ] || return 0
+
+        _animux_library_rows="$(library_helper_run list --view "$_animux_library_view")" || return 1
+        if [ -z "$_animux_library_rows" ]; then
+            status_msg "No anime in this library view."
+            continue
+        fi
+
+        _animux_library_selected="$(interactive_select_library_entry "$_animux_library_rows")"
+        _animux_library_select_rc=$?
+        [ "$_animux_library_select_rc" -eq 0 ] && [ -n "$_animux_library_selected" ] || continue
+
+        id="$(printf '%s\n' "$_animux_library_selected" | cut -f2)"
+        title="$(printf '%s\n' "$_animux_library_selected" | cut -f3)"
+        sub_lang="$(printf '%s\n' "$_animux_library_selected" | cut -f5)"
+        mode="$(printf '%s\n' "$_animux_library_selected" | cut -f6)"
+        provider="$(printf '%s\n' "$_animux_library_selected" | cut -f7)"
+        route_provider_for_id "$id"
+        [ -n "$(printf '%s\n' "$_animux_library_selected" | cut -f5)" ] && \
+            sub_lang="$(printf '%s\n' "$_animux_library_selected" | cut -f5)"
+        provider="$(resolve_provider)" || {
+            status_msg "Unsupported stored provider for $title"
+            continue
+        }
+        check_provider_deps
+        allanime_title="$(printf '%s' "$title" | cut -d'(' -f1 | tr -d '[:punct:]')"
+
+        while :; do
+            _animux_library_action="$(interactive_anime_actions)"
+            case "$_animux_library_action" in
+                stay) continue ;;
+                removed | back) break ;;
+                play)
+                    status_msg "Fetching episodes..."
+                    ep_list="$(episodes_list "$id")" || {
+                        status_msg "Failed to fetch episodes"
+                        break
+                    }
+                    selected_ep="$(interactive_select_episode "$ep_list")"
+                    _animux_library_ep_rc=$?
+                    if [ "$_animux_library_ep_rc" -eq 130 ] || [ -z "$selected_ep" ]; then
+                        ep_no=""
+                        continue
+                    fi
+                    ep_no="$selected_ep"
+                    mal_id=""
+                    playback_loop
+                    _animux_library_play_rc=$?
+                    ep_no=""
+                    if [ "$_animux_library_play_rc" -eq 200 ]; then
+                        search="scrape"
+                        query=""
+                        return 200
+                    elif [ "$_animux_library_play_rc" -eq 130 ]; then
+                        continue
+                    fi
+                    return 0
+                    ;;
+                *) break ;;
+            esac
+        done
+    done
+}
+
 # Main interactive loop: search -> select anime -> select episode -> playback.
 # Handles back-navigation via return code 130 (Esc/cancel).
 # Only re-shows the initial menu on explicit back from search prompt.
@@ -2081,6 +2335,25 @@ interactive_flow() {
         print_header
 
         case "$search" in
+            library)
+                library_flow
+                _animux_library_flow_rc=$?
+                if [ "$_animux_library_flow_rc" -eq 200 ]; then
+                    search="scrape"
+                    query=""
+                    continue
+                fi
+                if [ "$from_initial_menu" = "1" ]; then
+                    search="scrape"
+                    query=""
+                    select_initial_mode
+                    from_initial_menu=1
+                    provider="$(resolve_provider)" || die "Unsupported provider: $provider."
+                    check_provider_deps
+                    continue
+                fi
+                exit "$_animux_library_flow_rc"
+                ;;
             history)
                 anime_list=$(while read -r ep_no id title; do process_hist_entry & done <"$histfile")
                 wait
@@ -2292,6 +2565,18 @@ interactive_flow() {
                         allanime_title="$(printf "%s" "$title" | cut -d'(' -f1 | tr -d '[:punct:]')"
                         id=$(printf "%s" "$selected_anime" | cut -f1)
                         route_provider_for_id "$id"
+
+                        if offer_anime_actions; then
+                            while :; do
+                                anime_action="$(interactive_anime_actions)"
+                                case "$anime_action" in
+                                    play) break ;;
+                                    stay) continue ;;
+                                    back | removed) anime_action=back; break ;;
+                                esac
+                            done
+                            [ "$anime_action" = "back" ] && continue
+                        fi
 
                         while :; do
                             status_msg "Fetching episodes..."

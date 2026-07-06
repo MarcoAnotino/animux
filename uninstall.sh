@@ -58,4 +58,4 @@ remove_dir "$PREFIX/share/animux"
 remove_file "$PREFIX/share/man/man1/animux.1"
 
 say "Uninstalled animux from $PREFIX."
-say "Cache and watch history were left intact."
+say "Cache, watch history, and personal library were left intact."

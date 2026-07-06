@@ -5,6 +5,15 @@
 Upstream base: pystardust/ani-cli
 
 ### Added
+- **Personal anime library** — Watching, Watch later, Completed, Favorites,
+  Dropped, and All anime views backed by a separate atomic `library.json` file.
+- **Episode progress tracking** — successful playback/download records watched
+  episodes, last episode, known totals, and automatically completes the last
+  known episode without modifying the existing `ani-hsts` format.
+- **Library cover previews** — highlighted library entries reuse the existing
+  cover cache and terminal renderer, with textual metadata fallback.
+- **Search-result quick actions** — save or classify an anime before fetching
+  episodes; `-S`/`-e` non-interactive paths remain direct.
 - **Two-column episode browser** — episodes on the left, cover art on the right (50/50 fzf split)
 - **Two-column main menu** — menu options on the left, ASCII art on the right
 - **HD cover art** via Kitty graphics protocol using `chafa` (Ghostty, Kitty, WezTerm, iTerm2)
