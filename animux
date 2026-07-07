@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version_number="4.15.0"
+version_number="0.1.0"
 
 # ANIMUX_* is the public configuration namespace. Legacy ANI_CLI_* variables
 # remain supported so existing upstream configurations continue to work.
