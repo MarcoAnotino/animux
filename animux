@@ -930,9 +930,9 @@ main_menu() {
 WATCH       Spanish subtitles
 WATCH       Dubbed Spanish
 WATCH       Dubbed English
-RESUME      Continue watching
+RESUME      Continue next episode
 LIBRARY     My anime list
-HISTORY     Search history
+HISTORY     Browse watched anime
 EXIT        Close animux"
 
     if [ "$use_external_menu" = "0" ]; then
@@ -1035,7 +1035,7 @@ EXIT        Close animux"
         *"My anime list"*)
             search="library"
             ;;
-        *"Search history"*)
+        *"Browse watched anime"* | *"Search history"*)
             search="search_history"
             ;;
         *)
@@ -1370,7 +1370,7 @@ help_info() {
 
     Options:
       -c, --continue
-        Continue watching from history
+        Continue next episode from history
       -d, --download
         Download the video instead of playing it
       -D, --delete
