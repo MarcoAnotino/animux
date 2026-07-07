@@ -1826,11 +1826,28 @@ episodes_list() {
 # PLAYING
 
 process_hist_entry() {
-    ep_list=$(episodes_list "$id") || die "No se pudieron obtener los episodios"
-    latest_ep=$(printf "%s\n" "$ep_list" | tail -n1)
-    title=$(printf "%s\n" "$title" | sed "s|[0-9]\+ episodes|${latest_ep} episodes|")
-    ep_no=$(printf "%s" "$ep_list" | sed -n "/^${ep_no}$/{n;p;}") 2>/dev/null
-    [ -n "$ep_no" ] && printf "%s\t%s - episode %s\n" "$id" "$title" "$ep_no"
+    case "$ep_no" in
+        '' | *[!0-9.]*)
+            next_ep="$ep_no"
+            ;;
+        *.*)
+            next_ep="$(awk -v ep="$ep_no" '
+                BEGIN {
+                    n = ep + 1
+                    if (n == int(n)) {
+                        printf "%d", n
+                    } else {
+                        printf "%s", n
+                    }
+                }
+            ')"
+            ;;
+        *)
+            next_ep=$((ep_no + 1))
+            ;;
+    esac
+
+    [ -n "$next_ep" ] && printf "%s\t%s - episode %s\n" "$id" "$title" "$next_ep"
 }
 
 update_history() {
